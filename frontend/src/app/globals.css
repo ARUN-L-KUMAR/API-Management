@@ -1,0 +1,177 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  
+  --color-working: #10b981;
+  --color-failed: #ef4444;
+  --color-warning: #f59e0b;
+}
+
+/* Dark theme (default) */
+:root {
+  --background: #030303;
+  --foreground: #fafafa;
+  --card: #0a0a0c;
+  --card-foreground: #fafafa;
+  --border: #1f1f23;
+  --input: #1f1f23;
+  --primary: #8b5cf6;
+  --primary-foreground: #ffffff;
+  --muted: #121214;
+  --muted-foreground: #a1a1aa;
+}
+
+/* Light theme */
+:root.light,
+.light {
+  --background: #f8f9fa;
+  --foreground: #1a1a2e;
+  --card: #ffffff;
+  --card-foreground: #1a1a2e;
+  --border: #e2e4e9;
+  --input: #e2e4e9;
+  --primary: #7c3aed;
+  --primary-foreground: #ffffff;
+  --muted: #f1f3f5;
+  --muted-foreground: #6b7280;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow-x: hidden;
+}
+
+/* Light theme overrides for glass panels */
+.light .glass-panel {
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.light .glass-card {
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.01) 0%, rgba(0, 0, 0, 0.00) 100%);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.light .glass-card:hover {
+  border-color: rgba(124, 58, 237, 0.2);
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.02) 0%, rgba(0, 0, 0, 0.00) 100%);
+}
+
+.light input,
+.light select,
+.light textarea {
+  background-color: #ffffff !important;
+  border-color: #e2e4e9 !important;
+  color: #1a1a2e !important;
+}
+
+.light input::placeholder,
+.light textarea::placeholder {
+  color: #9ca3af !important;
+}
+
+.light select option {
+  background-color: #ffffff;
+  color: #1a1a2e;
+}
+
+.light table thead tr {
+  background-color: #f1f3f5 !important;
+  border-color: #e2e4e9 !important;
+}
+
+.light table tbody tr {
+  border-color: #e2e4e9 !important;
+}
+
+.light table tbody tr:hover {
+  background-color: #f8f9fa !important;
+}
+
+.light th {
+  color: #6b7280 !important;
+}
+
+.light td {
+  color: #374151 !important;
+}
+
+.light td h4 {
+  color: #1a1a2e !important;
+}
+
+/* Dark theme (default) glass panels */
+.glass-panel {
+  background: rgba(10, 10, 12, 0.75);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.glass-card {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.02) 0%, rgba(255, 255, 255, 0.00) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card:hover {
+  border-color: rgba(139, 92, 246, 0.3);
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.02) 0%, rgba(255, 255, 255, 0.00) 100%);
+  transform: translateY(-2px);
+}
+
+/* Premium Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #1f1f23;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
+}
+
+.light ::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+}
+.light ::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Micro Pulse Glows */
+.glow-pulse-working {
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.3);
+  animation: pulse-working 2.5s infinite alternate;
+}
+
+.glow-pulse-failed {
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.3);
+  animation: pulse-failed 2.5s infinite alternate;
+}
+
+@keyframes pulse-working {
+  0% { box-shadow: 0 0 4px rgba(16, 185, 129, 0.1); }
+  100% { box-shadow: 0 0 14px rgba(16, 185, 129, 0.45); }
+}
+
+@keyframes pulse-failed {
+  0% { box-shadow: 0 0 4px rgba(239, 68, 68, 0.1); }
+  100% { box-shadow: 0 0 14px rgba(239, 68, 68, 0.45); }
+}
