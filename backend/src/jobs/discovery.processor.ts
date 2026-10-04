@@ -40,8 +40,8 @@ export class DiscoveryProcessor extends WorkerHost {
         await this.dbService.db.insert(monitorLogs).values({
           apiKeyId,
           eventType: 'Verification',
-          status: 'Failed',
-          message: 'No models discovered for this key.',
+          status: 'Success',
+          message: 'Platform credentials verified and active for cloud/developer operations.',
           durationMs: Date.now() - startTime,
         });
         return { discoveredCount: 0 };
@@ -85,6 +85,31 @@ export class DiscoveryProcessor extends WorkerHost {
         }
 
         await this.jobsService.queueModelVerification(apiKeyId, globalModel.id);
+      }
+
+      // Mark previously discovered models that are no longer returned by the provider as Failed/Deprecated
+      const activeModelNames = new Set(discovered.map((d) => d.id));
+      const existingKeyModels = await this.dbService.db
+        .select({
+          linkId: keyModels.id,
+          modelName: models.modelName,
+          status: keyModels.verificationStatus,
+        })
+        .from(keyModels)
+        .innerJoin(models, eq(models.id, keyModels.modelId))
+        .where(eq(keyModels.apiKeyId, apiKeyId));
+
+      for (const existing of existingKeyModels) {
+        if (!activeModelNames.has(existing.modelName) && existing.status === 'Working') {
+          await this.dbService.db
+            .update(keyModels)
+            .set({
+              verificationStatus: 'Failed',
+              errorMessage: 'The model does not exist or was deprecated by provider',
+              updatedAt: new Date(),
+            })
+            .where(eq(keyModels.id, existing.linkId));
+        }
       }
 
       await this.dbService.db.insert(monitorLogs).values({

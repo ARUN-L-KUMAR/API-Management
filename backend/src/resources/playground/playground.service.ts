@@ -1,8 +1,8 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
 import { EncryptionService } from '../../common/encryption.service';
-import { apiKeys, models, playgroundSessions } from '../../database/schema';
-import { eq, and, desc } from 'drizzle-orm';
+import { apiKeys, models, playgroundSessions, keyModels } from '../../database/schema';
+import { eq, and, or, desc } from 'drizzle-orm';
 import { ProviderAdapterFactory } from '../../providers/provider-adapter.factory';
 
 @Injectable()
@@ -32,7 +32,7 @@ export class PlaygroundService {
     const [modelRecord] = await this.dbService.db
       .select()
       .from(models)
-      .where(eq(models.id, modelId))
+      .where(or(eq(models.id, modelId), eq(models.modelName, modelId)))
       .limit(1);
 
     if (!modelRecord) {
@@ -57,6 +57,18 @@ export class PlaygroundService {
         tokensUsed: 0,
       });
 
+      // Update key_models telemetry in real-time so working models stay 100% accurate
+      await this.dbService.db
+        .update(keyModels)
+        .set({
+          verificationStatus: result.status,
+          latencyMs: result.latencyMs || durationMs,
+          errorMessage: result.errorMessage || null,
+          lastVerifiedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(and(eq(keyModels.apiKeyId, apiKeyId), eq(keyModels.modelId, modelId)));
+
       return {
         status: result.status,
         response: result.response,
@@ -76,6 +88,17 @@ export class PlaygroundService {
         latencyMs: durationMs,
         tokensUsed: 0,
       });
+
+      await this.dbService.db
+        .update(keyModels)
+        .set({
+          verificationStatus: 'Failed',
+          latencyMs: durationMs,
+          errorMessage: error.message || 'Execution failed',
+          lastVerifiedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(and(eq(keyModels.apiKeyId, apiKeyId), eq(keyModels.modelId, modelId)));
 
       return {
         status: 'Failed',

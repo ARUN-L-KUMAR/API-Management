@@ -5,6 +5,8 @@ export interface ApiKey {
   apiKey?: string
   plainApiKey?: string
   description?: string
+  accountEmail?: string
+  accountPhone?: string
   folderId?: string
   tagIds?: string[]
   tags: { id: string; name: string; color: string }[]
@@ -57,6 +59,8 @@ interface CreateKeyPayload {
   providerCode: string
   apiKey: string
   description?: string
+  accountEmail?: string
+  accountPhone?: string
   folderId?: string
   tagIds?: string[]
   isMonitoringEnabled: boolean
@@ -66,10 +70,13 @@ interface CreateKeyPayload {
 interface UpdateKeyPayload {
   keyName?: string
   description?: string
+  accountEmail?: string | null
+  accountPhone?: string | null
   folderId?: string | null
   isMonitoringEnabled?: boolean
   monitoringFrequency?: number
   tagIds?: string[]
+  apiKey?: string
 }
 
 export interface AuthResponse {
@@ -166,6 +173,15 @@ export const api = {
     request<void>('/api-keys/bulk-delete', { method: 'POST', body: JSON.stringify({ ids }) }),
   bulkValidateKeys: (ids: string[]) =>
     request<{ status: string }[]>('/api-keys/bulk-validate', { method: 'POST', body: JSON.stringify({ ids }) }),
+  syncAllModels: () =>
+    request<{
+      message: string
+      keysCount: number
+      totalDiscovered: number
+      workingModels: number
+      failedModels: number
+      details: any[]
+    }>('/api-keys/sync-all-models', { method: 'POST' }),
 
   getFolders: () => request<Folder[]>('/folders'),
   createFolder: (name: string) => request<Folder>('/folders', { method: 'POST', body: JSON.stringify({ name }) }),

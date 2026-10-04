@@ -103,7 +103,7 @@ npm run start:dev
 ```
 *This starts the API endpoints, boots the BullMQ workers, and begins the 5-minute background cron schedule scanning monitoring frequencies.*
 
-### B. Boot the Next.js Frontend (Port `3000`)
+### B. Boot the Next.js Frontend (Port `4001`)
 Open a new terminal window:
 ```bash
 cd apps/frontend
@@ -111,7 +111,7 @@ npm run dev
 ```
 
 ### C. Connect & Test
-1. Open your browser to `http://localhost:3000` to load the registry dashboard.
+1. Open your browser to `http://localhost:4001` to load the registry dashboard.
 2. Click **Add API Key** in the top-right corner to vault a new credential.
 3. To test immediately using mock credentials without making third-party provider calls:
    - Select **DoubleWorld AI** or **OpenCode** as the provider.

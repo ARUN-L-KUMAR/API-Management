@@ -35,6 +35,12 @@ export class ApiKeysController {
     return this.apiKeysService.bulkValidate(ids, orgId);
   }
 
+  @Post('sync-all-models')
+  @HttpCode(HttpStatus.OK)
+  syncAllModels(@OrgId() orgId: string) {
+    return this.apiKeysService.syncAllModels(orgId);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string, @OrgId() orgId: string) {
     return this.apiKeysService.findOne(id, orgId);

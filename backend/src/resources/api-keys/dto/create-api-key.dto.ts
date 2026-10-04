@@ -15,6 +15,14 @@ export class CreateApiKeyDto {
   description?: string;
 
   @IsOptional()
+  @IsString()
+  accountEmail?: string;
+
+  @IsOptional()
+  @IsString()
+  accountPhone?: string;
+
+  @IsOptional()
   @IsUUID()
   folderId?: string;
 

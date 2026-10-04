@@ -10,20 +10,20 @@ export function Input({ label, error, className, id, ...props }: InputProps) {
   return (
     <div className="space-y-1.5">
       {label && (
-        <label htmlFor={id} className="text-[10px] uppercase font-bold text-zinc-400 block">
+        <label htmlFor={id} className="text-[10px] uppercase font-bold text-muted-foreground block">
           {label}
         </label>
       )}
       <input
         id={id}
         className={clsx(
-          'w-full bg-zinc-900 border rounded-lg text-xs text-white px-3 py-2.5 focus:outline-none focus:border-purple-500 placeholder-zinc-600 transition-colors',
-          error ? 'border-red-500' : 'border-[#1f1f23]',
+          'w-full bg-card dark:bg-zinc-900 border rounded-lg text-xs text-foreground px-3 py-2.5 focus:outline-none focus:border-purple-500 placeholder-muted-foreground transition-colors',
+          error ? 'border-red-500' : 'border-border dark:border-[#1f1f23]',
           className
         )}
         {...props}
       />
-      {error && <p className="text-[10px] text-red-400">{error}</p>}
+      {error && <p className="text-[10px] text-red-500 dark:text-red-400">{error}</p>}
     </div>
   )
 }
@@ -37,22 +37,22 @@ export function Select({ label, error, className, id, children, ...props }: Sele
   return (
     <div className="space-y-1.5">
       {label && (
-        <label htmlFor={id} className="text-[10px] uppercase font-bold text-zinc-400 block">
+        <label htmlFor={id} className="text-[10px] uppercase font-bold text-muted-foreground block">
           {label}
         </label>
       )}
       <select
         id={id}
         className={clsx(
-          'w-full bg-zinc-900 border rounded-lg text-xs text-white px-3 py-2.5 focus:outline-none focus:border-purple-500 transition-colors',
-          error ? 'border-red-500' : 'border-[#1f1f23]',
+          'w-full bg-card dark:bg-zinc-900 border rounded-lg text-xs text-foreground px-3 py-2.5 focus:outline-none focus:border-purple-500 transition-colors',
+          error ? 'border-red-500' : 'border-border dark:border-[#1f1f23]',
           className
         )}
         {...props}
       >
         {children}
       </select>
-      {error && <p className="text-[10px] text-red-400">{error}</p>}
+      {error && <p className="text-[10px] text-red-500 dark:text-red-400">{error}</p>}
     </div>
   )
 }

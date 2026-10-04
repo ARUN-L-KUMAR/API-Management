@@ -101,7 +101,7 @@ export class GeminiAdapter implements ProviderAdapter {
         return { status: 'Invalid', errorMessage: 'Invalid API Key parameter.' };
       }
       if (status === 403) {
-        return { status: 'Unauthorized', errorMessage: 'API key does not have permission.' };
+        return { status: 'Unauthorized', errorMessage: message || 'API key does not have permission.' };
       }
       if (status === 429) {
         if (message.includes('quota')) {

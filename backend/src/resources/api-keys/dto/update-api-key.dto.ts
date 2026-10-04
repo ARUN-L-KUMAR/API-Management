@@ -10,6 +10,14 @@ export class UpdateApiKeyDto {
   description?: string;
 
   @IsOptional()
+  @IsString()
+  accountEmail?: string;
+
+  @IsOptional()
+  @IsString()
+  accountPhone?: string;
+
+  @IsOptional()
   @IsUUID()
   folderId?: string;
 
@@ -26,4 +34,8 @@ export class UpdateApiKeyDto {
   @IsInt()
   @Min(15)
   monitoringFrequency?: number;
+
+  @IsOptional()
+  @IsString()
+  apiKey?: string;
 }

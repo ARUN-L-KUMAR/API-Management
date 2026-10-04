@@ -75,6 +75,8 @@ export const apiKeys = pgTable('api_keys', {
   keyName: varchar('key_name', { length: 255 }).notNull(),
   encryptedApiKey: text('encrypted_api_key').notNull(),
   description: text('description'),
+  accountEmail: varchar('account_email', { length: 255 }),
+  accountPhone: varchar('account_phone', { length: 50 }),
   folderId: uuid('folder_id').references(() => folders.id, { onDelete: 'set null' }),
   isMonitoringEnabled: boolean('is_monitoring_enabled').default(false).notNull(),
   monitoringFrequency: integer('monitoring_frequency').default(60).notNull(), // minutes

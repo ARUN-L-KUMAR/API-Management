@@ -21,4 +21,15 @@ export class JobsService {
   async queueModelVerification(apiKeyId: string, modelId: string) {
     await this.verificationQueue.add('verify', { apiKeyId, modelId }, { removeOnComplete: true });
   }
+
+  async queueModelVerificationBulk(items: { apiKeyId: string; modelId: string }[]) {
+    if (!items || items.length === 0) return;
+    const jobs = items.map((item) => ({
+      name: 'verify',
+      data: item,
+      opts: { removeOnComplete: true },
+    }));
+    await this.verificationQueue.addBulk(jobs);
+  }
 }
+

@@ -11,6 +11,7 @@ import {
   Mail, Phone
 } from 'lucide-react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { api } from '@/lib/api'
 import { useStore } from '@/store/useStore'
 import { toast } from 'sonner'
@@ -45,6 +46,19 @@ export const PLATFORM_CONFIG: Record<string, {
       curl: `curl "https://api.cloudinary.com/v1_1/<cloud_name>/resources/image" \\\n  -u "<api_key>:<api_secret>"`,
       js: `import { v2 as cloudinary } from 'cloudinary';\n\ncloudinary.config({\n  cloud_name: '<cloud_name>',\n  api_key: '<api_key>',\n  api_secret: '<api_secret>',\n  secure: true\n});`,
       python: `import cloudinary\nimport cloudinary.uploader\n\ncloudinary.config(\n  cloud_name = "<cloud_name>",\n  api_key = "<api_key>",\n  api_secret = "<api_secret>",\n  secure = True\n)`
+    }
+  },
+  elevenlabs: {
+    name: 'ElevenLabs',
+    category: 'Speech & Voice Synthesis',
+    icon: '🎙️',
+    capabilities: ['Voice Cloning & Design', 'Text-to-Speech Generation', 'Audio Isolation & Dubbing', 'Multi-lingual Voice Models'],
+    placeholder: 'xi-... or your ElevenLabs API key',
+    hint: 'Format: ElevenLabs API Key (xi-...)',
+    codeSnippet: {
+      curl: `curl -H "xi-api-key: <KEY>" "https://api.elevenlabs.io/v1/user"`,
+      js: `import { ElevenLabsClient } from "elevenlabs";\nconst client = new ElevenLabsClient({ apiKey: "<KEY>" });`,
+      python: `from elevenlabs.client import ElevenLabs\nclient = ElevenLabs(api_key="<KEY>")`
     }
   },
   aws: {
@@ -179,27 +193,26 @@ export const PLATFORM_CONFIG: Record<string, {
   }
 }
 
-export default function KeysPage() {
+export default function PlatformVaultPage() {
+  const pathname = usePathname()
   const queryClient = useQueryClient()
   const {
     activeFolderId, activeTagIds, searchQuery, providerFilter, statusFilter,
     setSearchQuery, setProviderFilter, setStatusFilter, resetFilters,
-    setActiveFolderId, toggleTagId,
+    setActiveFolderId,
   } = useStore()
 
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table')
   const [isKeyModalOpen, setIsKeyModalOpen] = useState(false)
-  const [isFolderModalOpen, setIsFolderModalOpen] = useState(false)
-  const [isTagModalOpen, setIsTagModalOpen] = useState(false)
   const [revealedKeyId, setRevealedKeyId] = useState<string | null>(null)
   const [copiedKeyId, setCopiedKeyId] = useState<string | null>(null)
   const [editingKey, setEditingKey] = useState<any | null>(null)
   const [selectedKeyIds, setSelectedKeyIds] = useState<string[]>([])
-  const [inspectingKeyForModels, setInspectingKeyForModels] = useState<any | null>(null)
+  const [inspectingPlatformKey, setInspectingPlatformKey] = useState<any | null>(null)
 
   const [newKeyName, setNewKeyName] = useState('')
-  const [vaultCategory, setVaultCategory] = useState<'ai' | 'platform'>('ai')
-  const [newKeyProvider, setNewKeyProvider] = useState('openai')
+  const [vaultCategory, setVaultCategory] = useState<'ai' | 'platform'>('platform')
+  const [newKeyProvider, setNewKeyProvider] = useState('cloudinary')
   const [newKeySecret, setNewKeySecret] = useState('')
   const [showNewSecret, setShowNewSecret] = useState(false)
   const [newKeyDesc, setNewKeyDesc] = useState('')
@@ -211,26 +224,24 @@ export default function KeysPage() {
   const [newKeyFrequency, setNewKeyFrequency] = useState(60)
   const [editSecretValue, setEditSecretValue] = useState('')
   const [showEditSecret, setShowEditSecret] = useState(false)
-  const [newFolderName, setNewFolderName] = useState('')
-  const [newTagName, setNewTagName] = useState('')
-  const [newTagColor, setNewTagColor] = useState('#8b5cf6')
 
+  // Fetch all keys
   const { data: rawKeys = [], isLoading: isLoadingKeys } = useQuery({
     queryKey: ['keys', activeFolderId],
     queryFn: () => api.getKeys(activeFolderId || undefined),
   })
 
-  // Filter keys strictly for AI Foundation Models
-  const keys = useMemo(() => {
-    return rawKeys.filter((k: any) => AI_MODEL_PROVIDERS.includes(k.providerCode?.toLowerCase()))
-  }, [rawKeys])
-
-  const platformSecretsCount = useMemo(() => {
-    return rawKeys.filter((k: any) => !AI_MODEL_PROVIDERS.includes(k.providerCode?.toLowerCase())).length
-  }, [rawKeys])
-
   const { data: folders = [] } = useQuery({ queryKey: ['folders'], queryFn: api.getFolders })
   const { data: tags = [] } = useQuery({ queryKey: ['tags'], queryFn: api.getTags })
+
+  // Filter keys strictly for Platform, Cloud, and Developer secrets (non-AI)
+  const platformKeys = useMemo(() => {
+    return rawKeys.filter((k: any) => !AI_MODEL_PROVIDERS.includes(k.providerCode?.toLowerCase()))
+  }, [rawKeys])
+
+  const aiKeysCount = useMemo(() => {
+    return rawKeys.filter((k: any) => AI_MODEL_PROVIDERS.includes(k.providerCode?.toLowerCase())).length
+  }, [rawKeys])
 
   const createKeyMutation = useMutation({
     mutationFn: api.createKey,
@@ -238,7 +249,7 @@ export default function KeysPage() {
       queryClient.invalidateQueries({ queryKey: ['keys'] })
       setIsKeyModalOpen(false)
       resetKeyForm()
-      toast.success('API Key securely vaulted & health probe queued')
+      toast.success('Platform credential vaulted & verified')
     },
     onError: (err: any) => toast.error(err.message),
   })
@@ -250,7 +261,7 @@ export default function KeysPage() {
       setEditingKey(null)
       setEditSecretValue('')
       setShowEditSecret(false)
-      toast.success('API Key metadata updated')
+      toast.success('Secret metadata updated')
     },
     onError: (err: any) => toast.error(err.message),
   })
@@ -259,7 +270,7 @@ export default function KeysPage() {
     mutationFn: api.deleteKey,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['keys'] })
-      toast.success('API Key removed from vault')
+      toast.success('Secret removed from vault')
     },
   })
 
@@ -268,30 +279,8 @@ export default function KeysPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['keys'] })
       queryClient.invalidateQueries({ queryKey: ['logs'] })
-      toast.success('Validation probe triggered successfully')
+      toast.success('Validation probe dispatched')
     },
-  })
-
-  const createFolderMutation = useMutation({
-    mutationFn: api.createFolder,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['folders'] })
-      setIsFolderModalOpen(false)
-      setNewFolderName('')
-      toast.success('Folder created')
-    },
-    onError: (err: any) => toast.error(err.message),
-  })
-
-  const createTagMutation = useMutation({
-    mutationFn: (data: { name: string; color: string }) => api.createTag(data.name, data.color),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tags'] })
-      setIsTagModalOpen(false)
-      setNewTagName('')
-      toast.success('Tag created')
-    },
-    onError: (err: any) => toast.error(err.message),
   })
 
   const bulkDeleteMutation = useMutation({
@@ -299,7 +288,7 @@ export default function KeysPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['keys'] })
       setSelectedKeyIds([])
-      toast.success('Selected keys deleted')
+      toast.success('Selected secrets deleted')
     },
   })
 
@@ -313,9 +302,9 @@ export default function KeysPage() {
   })
 
   const resetKeyForm = () => {
-    setVaultCategory('ai')
+    setVaultCategory('platform')
     setNewKeyName('')
-    setNewKeyProvider('openai')
+    setNewKeyProvider('cloudinary')
     setNewKeySecret('')
     setShowNewSecret(false)
     setNewKeyDesc('')
@@ -340,7 +329,7 @@ export default function KeysPage() {
   }
 
   const filteredKeys = useMemo(() => {
-    return keys.filter((key: any) => {
+    return platformKeys.filter((key: any) => {
       // 1. Status Filter
       if (statusFilter === 'working' && key.status !== 'Working') return false
       if (statusFilter === 'invalid' && key.status === 'Working') return false
@@ -374,22 +363,21 @@ export default function KeysPage() {
 
       return true
     })
-  }, [keys, statusFilter, providerFilter, searchQuery, activeTagIds, activeFolderId])
+  }, [platformKeys, statusFilter, providerFilter, searchQuery, activeTagIds, activeFolderId])
 
-  const totalKeys = keys.length
-  const workingKeysCount = useMemo(() => keys.filter((k: any) => k.status === 'Working').length, [keys])
-  const invalidKeysCount = useMemo(() => keys.filter((k: any) => k.status !== 'Working').length, [keys])
-  const monitoringCount = useMemo(() => keys.filter((k: any) => k.isMonitoringEnabled).length, [keys])
+  const totalKeys = platformKeys.length
+  const workingKeysCount = useMemo(() => platformKeys.filter((k: any) => k.status === 'Working').length, [platformKeys])
+  const invalidKeysCount = useMemo(() => platformKeys.filter((k: any) => k.status !== 'Working').length, [platformKeys])
   const healthRate = totalKeys > 0 ? Math.round((workingKeysCount / totalKeys) * 100) : 100
   const uniqueProvidersList = useMemo(() => {
-    const set = new Set(keys.map((k: any) => k.providerCode.toLowerCase()))
+    const set = new Set(platformKeys.map((k: any) => k.providerCode.toLowerCase()))
     return Array.from(set)
-  }, [keys])
+  }, [platformKeys])
 
   const handleCreateKey = (e: React.FormEvent) => {
     e.preventDefault()
     if (!newKeyName.trim() || !newKeySecret.trim()) {
-      toast.error('Key Name and Secret are required')
+      toast.error('Identifier Name and Secret are required')
       return
     }
     createKeyMutation.mutate({
@@ -425,66 +413,21 @@ export default function KeysPage() {
     })
   }
 
+  const copyToClipboard = (text: string, id: string) => {
+    navigator.clipboard.writeText(text)
+    setCopiedKeyId(id)
+    toast.success('Secret copied to clipboard')
+    setTimeout(() => setCopiedKeyId(null), 2000)
+  }
+
   const handleBulkDelete = () => {
-    if (selectedKeyIds.length === 0) return
-    if (confirm(`Permanently remove ${selectedKeyIds.length} vaulted API keys?`)) {
+    if (confirm(`Are you sure you want to delete ${selectedKeyIds.length} secrets?`)) {
       bulkDeleteMutation.mutate(selectedKeyIds)
     }
   }
 
   const handleBulkValidate = () => {
-    if (selectedKeyIds.length === 0) return
     bulkValidateMutation.mutate(selectedKeyIds)
-  }
-
-  const syncAllMutation = useMutation({
-    mutationFn: api.syncAllModels,
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['keys'] })
-      queryClient.invalidateQueries({ queryKey: ['key-models'] })
-      queryClient.invalidateQueries({ queryKey: ['key-working-models'] })
-      queryClient.invalidateQueries({ queryKey: ['models'] })
-      queryClient.invalidateQueries({ queryKey: ['logs'] })
-      toast.success(data.message || `Scanned ${data.keysCount} keys: ${data.workingModels} working models verified live!`)
-    },
-    onError: (err: any) => toast.error(err.message || 'Failed to sync models'),
-  })
-
-  const copyToClipboard = (text: string, id: string) => {
-    navigator.clipboard.writeText(text)
-    setCopiedKeyId(id)
-    toast.success('Key copied to clipboard')
-    setTimeout(() => setCopiedKeyId(null), 2000)
-  }
-
-  const exportToJSON = () => {
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(keys, null, 2))
-    const a = document.createElement('a')
-    a.setAttribute('href', dataStr)
-    a.setAttribute('download', `ai-registry-export-${new Date().toISOString().slice(0, 10)}.json`)
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    toast.success('JSON export generated')
-  }
-
-  const exportToCSV = () => {
-    const headers = ['ID', 'Key Name', 'Provider', 'Status', 'Monitoring Enabled', 'Frequency', 'Created At']
-    const rows = keys.map((k: any) => [
-      k.id, k.keyName, k.providerCode, k.status,
-      k.isMonitoringEnabled ? 'Yes' : 'No', k.monitoringFrequency,
-      new Date(k.createdAt).toLocaleDateString(),
-    ])
-    const csvContent =
-      'data:text/csv;charset=utf-8,' +
-      [headers.join(','), ...rows.map((e: any[]) => e.map((val: any) => `"${val}"`).join(','))].join('\n')
-    const a = document.createElement('a')
-    a.setAttribute('href', encodeURI(csvContent))
-    a.setAttribute('download', `ai-registry-export-${new Date().toISOString().slice(0, 10)}.csv`)
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    toast.success('CSV export generated')
   }
 
   return (
@@ -493,46 +436,46 @@ export default function KeysPage() {
       <div className="px-4 lg:px-6 pt-3 pb-0 bg-zinc-950/70 border-b border-[#1e1e24] flex items-center gap-2 shrink-0">
         <Link
           href="/keys"
-          className="flex items-center gap-2 px-4 py-2 border-b-2 border-purple-500 text-xs font-bold text-purple-300 bg-purple-500/10 rounded-t-lg transition-all cursor-pointer shadow-xs"
+          className="flex items-center gap-2 px-4 py-2 border-b-2 border-transparent text-xs font-semibold text-muted-foreground hover:text-foreground transition-all cursor-pointer"
         >
-          <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+          <Sparkles className="w-3.5 h-3.5 text-purple-500 dark:text-purple-400" />
           <span>AI Foundation Models</span>
-          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-purple-500/20 text-purple-300">
-            {totalKeys}
+          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-muted text-muted-foreground">
+            {aiKeysCount}
           </span>
         </Link>
         <Link
           href="/vault"
-          className="flex items-center gap-2 px-4 py-2 border-b-2 border-transparent text-xs font-semibold text-muted-foreground hover:text-foreground transition-all cursor-pointer"
+          className="flex items-center gap-2 px-4 py-2 border-b-2 border-sky-500 text-xs font-bold text-sky-300 bg-sky-500/10 rounded-t-lg transition-all cursor-pointer shadow-xs"
         >
-          <ShieldCheck className="w-3.5 h-3.5 text-sky-500 dark:text-sky-400" />
+          <ShieldCheck className="w-3.5 h-3.5 text-sky-400" />
           <span>Platform & Cloud Secrets</span>
-          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-muted text-muted-foreground">
-            {platformSecretsCount}
+          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-sky-500/20 text-sky-300">
+            {totalKeys}
           </span>
         </Link>
       </div>
 
       {/* Subheader / Action Bar */}
-      <div className="p-4 lg:p-6 border-b border-[#1e1e24] bg-zinc-950/40 backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
+      <div className="p-4 lg:p-6 border-b border-border bg-card/60 dark:bg-zinc-950/40 backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-xl font-extrabold text-white tracking-tight">AI Keys Inventory & Health</h2>
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/10 border border-purple-500/30 text-purple-400 font-mono">
-              AES-256 Vaulted
+            <h2 className="text-xl font-extrabold text-foreground tracking-tight">Platform Secrets & Cloud Vault</h2>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/10 border border-sky-500/30 text-sky-700 dark:text-sky-400 font-mono">
+              AES-256 GCM
             </span>
           </div>
-          <p className="text-xs text-zinc-400 mt-1">
-            Vault, probe, and inspect active working models for foundation model providers (OpenAI, Claude, Gemini, Groq, DeepSeek).
+          <p className="text-xs text-muted-foreground mt-1">
+            Vault, probe, and inspect credentials for Cloud Infrastructure (AWS, GCP), Media CDN (Cloudinary), Databases (Redis), and Developer APIs.
           </p>
         </div>
 
         <div className="flex items-center gap-2.5">
-          <div className="flex items-center p-0.5 rounded-lg border border-zinc-800 bg-zinc-900/60">
+          <div className="flex items-center p-0.5 rounded-lg border border-border dark:border-zinc-800 bg-muted dark:bg-zinc-900/60">
             <button
               onClick={() => setViewMode('table')}
               className={`p-1.5 rounded-md text-xs font-medium transition-all cursor-pointer ${
-                viewMode === 'table' ? 'bg-zinc-800 text-white shadow-xs' : 'text-zinc-500 hover:text-zinc-300'
+                viewMode === 'table' ? 'bg-card dark:bg-zinc-800 text-foreground dark:text-white shadow-xs' : 'text-muted-foreground hover:text-foreground'
               }`}
               title="Table View"
             >
@@ -541,7 +484,7 @@ export default function KeysPage() {
             <button
               onClick={() => setViewMode('grid')}
               className={`p-1.5 rounded-md text-xs font-medium transition-all cursor-pointer ${
-                viewMode === 'grid' ? 'bg-zinc-800 text-white shadow-xs' : 'text-zinc-500 hover:text-zinc-300'
+                viewMode === 'grid' ? 'bg-card dark:bg-zinc-800 text-foreground dark:text-white shadow-xs' : 'text-muted-foreground hover:text-foreground'
               }`}
               title="Grid View"
             >
@@ -549,153 +492,115 @@ export default function KeysPage() {
             </button>
           </div>
 
-          <Button
-            onClick={() => syncAllMutation.mutate()}
-            disabled={syncAllMutation.isPending}
-            variant="secondary"
-            size="md"
-            className="flex items-center gap-2 border border-purple-500/30 text-purple-300 hover:text-white hover:bg-purple-950/40 cursor-pointer shadow-md"
-            title="Scan and verify active working models across all provider keys live"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${syncAllMutation.isPending ? 'animate-spin' : ''}`} />
-            <span>{syncAllMutation.isPending ? 'Syncing Models...' : 'Sync & Verify All Models'}</span>
-          </Button>
-
-          <Button onClick={() => setIsKeyModalOpen(true)} variant="primary" size="md" className="shadow-lg shadow-purple-900/25">
-            <Plus className="w-4 h-4" /> Add API Key
+          <Button onClick={() => setIsKeyModalOpen(true)} variant="primary" size="md" className="shadow-lg shadow-sky-900/25 bg-sky-600 hover:bg-sky-500">
+            <Plus className="w-4 h-4" /> Vault Platform Secret
           </Button>
         </div>
       </div>
 
-      {/* Executive Metrics Cockpit - Directly addressing Valid vs Invalid vs Available */}
+      {/* Cockpit Metrics */}
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 p-4 lg:p-6 shrink-0 border-b border-[#1e1e24] bg-zinc-950/20">
-        {/* Metric 1: Total APIs */}
+        {/* Metric 1 */}
         <div className="glass-panel p-4 rounded-xl flex items-center gap-3.5 relative overflow-hidden group">
-          <div className="p-3 bg-purple-600/10 border border-purple-500/20 rounded-xl text-purple-400 group-hover:scale-105 transition-transform">
-            <Key className="w-5 h-5" />
+          <div className="p-3 bg-sky-600/10 border border-sky-500/20 rounded-xl text-sky-400 group-hover:scale-105 transition-transform">
+            <ShieldCheck className="w-5 h-5" />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">Total APIs Vaulted</span>
-              <span className="text-[10px] text-purple-400 font-semibold font-mono">Inventory</span>
+              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">Secrets Vaulted</span>
+              <span className="text-[10px] text-sky-400 font-semibold font-mono">Encrypted</span>
             </div>
             <h3 className="text-xl font-black text-white mt-0.5 tracking-tight">{totalKeys}</h3>
           </div>
         </div>
 
-        {/* Metric 2: Valid & Working APIs */}
+        {/* Metric 2 */}
         <div 
           onClick={() => setStatusFilter(statusFilter === 'working' ? null : 'working')}
           className={`glass-panel p-4 rounded-xl flex items-center gap-3.5 relative overflow-hidden group cursor-pointer transition-all ${
             statusFilter === 'working' ? 'border-emerald-500/40 bg-emerald-950/15' : 'hover:border-emerald-500/30'
           }`}
-          title="Click to view only valid working APIs"
         >
           <div className="p-3 bg-emerald-600/10 border border-emerald-500/20 rounded-xl text-emerald-400 group-hover:scale-105 transition-transform">
             <CheckCircle className="w-5 h-5" />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">Valid APIs (Working)</span>
-              <span className="text-[10px] text-emerald-400 font-semibold font-mono">{healthRate}% Rate</span>
+              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">Valid & Ready</span>
+              <span className="text-[10px] text-emerald-400 font-semibold font-mono">{healthRate}% Health</span>
             </div>
             <h3 className="text-xl font-black text-emerald-400 mt-0.5 tracking-tight">
-              {workingKeysCount} <span className="text-xs text-zinc-400 font-normal">Active & Ready</span>
+              {workingKeysCount} <span className="text-xs text-zinc-400 font-normal">Active</span>
             </h3>
           </div>
         </div>
 
-        {/* Metric 3: Invalid / Attention Needed */}
+        {/* Metric 3 */}
         <div 
           onClick={() => setStatusFilter(statusFilter === 'invalid' ? null : 'invalid')}
           className={`glass-panel p-4 rounded-xl flex items-center gap-3.5 relative overflow-hidden group cursor-pointer transition-all ${
             statusFilter === 'invalid' ? 'border-red-500/40 bg-red-950/15' : 'hover:border-red-500/30'
           }`}
-          title="Click to view invalid or expired APIs"
         >
           <div className="p-3 bg-red-600/10 border border-red-500/20 rounded-xl text-red-400 group-hover:scale-105 transition-transform">
             <XCircle className="w-5 h-5" />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">Invalid / Inactive</span>
+              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">Attention Needed</span>
               <span className="text-[10px] text-red-400 font-semibold font-mono">{invalidKeysCount} Issues</span>
             </div>
             <h3 className="text-xl font-black text-white mt-0.5 tracking-tight">
-              {invalidKeysCount} <span className="text-xs text-zinc-500 font-normal">Need Attention</span>
+              {invalidKeysCount} <span className="text-xs text-zinc-500 font-normal">Expired / Invalid</span>
             </h3>
           </div>
         </div>
 
-        {/* Metric 4: Platforms & Providers */}
+        {/* Metric 4 */}
         <div className="glass-panel p-4 rounded-xl flex items-center gap-3.5 relative overflow-hidden group">
-          <div className="p-3 bg-blue-600/10 border border-blue-500/20 rounded-xl text-blue-400 group-hover:scale-105 transition-transform">
-            <Server className="w-5 h-5" />
+          <div className="p-3 bg-indigo-600/10 border border-indigo-500/20 rounded-xl text-indigo-400 group-hover:scale-105 transition-transform">
+            <Cloud className="w-5 h-5" />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">Platforms & APIs</span>
-              <span className="text-[10px] text-blue-400 font-semibold font-mono">Multi-Cloud</span>
+              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">Connected Platforms</span>
+              <span className="text-[10px] text-indigo-400 font-semibold font-mono">Multi-Cloud</span>
             </div>
-            <h3 className="text-xl font-black text-white mt-0.5 tracking-tight">{uniqueProvidersList.length} Vaulted</h3>
+            <h3 className="text-xl font-black text-white mt-0.5 tracking-tight">{uniqueProvidersList.length} Platforms</h3>
           </div>
         </div>
       </section>
 
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-4">
-        {/* Quick Filter Status Tabs */}
+        {/* Status Tabs */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-1.5 p-1 rounded-xl bg-zinc-900/80 border border-zinc-800">
             <button
               onClick={() => setStatusFilter(null)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                statusFilter === null
-                  ? 'bg-purple-600 text-white shadow-sm'
-                  : 'text-zinc-400 hover:text-white'
+                statusFilter === null ? 'bg-sky-600 text-white shadow-sm' : 'text-zinc-400 hover:text-white'
               }`}
             >
-              All APIs ({totalKeys})
+              All Secrets ({totalKeys})
             </button>
             <button
               onClick={() => setStatusFilter('working')}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-                statusFilter === 'working'
-                  ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'text-zinc-400 hover:text-emerald-400'
+                statusFilter === 'working' ? 'bg-emerald-600 text-white shadow-sm' : 'text-zinc-400 hover:text-emerald-400'
               }`}
             >
               <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Valid APIs Only ({workingKeysCount})</span>
+              <span>Valid ({workingKeysCount})</span>
             </button>
             <button
               onClick={() => setStatusFilter('invalid')}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-                statusFilter === 'invalid'
-                  ? 'bg-red-600 text-white shadow-sm'
-                  : 'text-zinc-400 hover:text-red-400'
+                statusFilter === 'invalid' ? 'bg-red-600 text-white shadow-sm' : 'text-zinc-400 hover:text-red-400'
               }`}
             >
               <XCircle className="w-3.5 h-3.5 text-red-400" />
-              <span>Invalid APIs ({invalidKeysCount})</span>
-            </button>
-          </div>
-
-          {/* Export tools */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={exportToJSON}
-              className="text-[11px] font-semibold text-zinc-400 hover:text-white px-2.5 py-1.5 bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
-              title="Export as JSON"
-            >
-              <Download className="w-3 h-3" /> JSON
-            </button>
-            <button
-              onClick={exportToCSV}
-              className="text-[11px] font-semibold text-zinc-400 hover:text-white px-2.5 py-1.5 bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
-              title="Export as CSV"
-            >
-              <Download className="w-3 h-3" /> CSV
+              <span>Attention Needed ({invalidKeysCount})</span>
             </button>
           </div>
         </div>
@@ -708,54 +613,39 @@ export default function KeysPage() {
               <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
               <input
                 type="text"
-                placeholder="Search keys by name or provider..."
+                placeholder="Search platform secrets by name..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 bg-zinc-900/80 border border-zinc-800 rounded-lg text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500/80"
+                className="w-full pl-9 pr-3 py-1.5 bg-zinc-900/80 border border-zinc-800 rounded-lg text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-sky-500"
               />
             </div>
 
-            {/* Provider Select */}
+            {/* Provider Filter */}
             <select
               value={providerFilter || ''}
               onChange={(e) => setProviderFilter(e.target.value || null)}
-              className="bg-zinc-900/80 border border-zinc-800 rounded-lg text-xs text-zinc-300 px-3 py-1.5 focus:outline-none focus:border-purple-500/80"
+              className="bg-zinc-900/80 border border-zinc-800 rounded-lg text-xs text-zinc-300 px-3 py-1.5 focus:outline-none focus:border-sky-500"
             >
-              <option value="">All Platforms & Providers ({keys.length})</option>
-              <optgroup label="AI Models">
-                <option value="openai">OpenAI</option>
-                <option value="gemini">Google Gemini</option>
-                <option value="anthropic">Anthropic Claude</option>
-                <option value="groq">Groq</option>
-                <option value="deepseek">DeepSeek</option>
-                <option value="together">Together AI</option>
-                <option value="openrouter">OpenRouter</option>
-              </optgroup>
-              <optgroup label="Cloud & Media Platforms">
-                <option value="elevenlabs">ElevenLabs (Voice & Audio)</option>
-                <option value="aws">AWS (Amazon Web Services)</option>
-                <option value="cloudinary">Cloudinary</option>
-                <option value="googlecloud">Google Cloud</option>
-                <option value="googleconsole">Google Console</option>
-                <option value="cloudflare">Cloudflare</option>
-              </optgroup>
-              <optgroup label="Databases & Caching">
-                <option value="redis">Redis</option>
-                <option value="upstash">Upstash</option>
-              </optgroup>
-              <optgroup label="Developer Platforms & Bots">
-                <option value="telegram">Telegram</option>
-                <option value="github">GitHub</option>
-                <option value="stripe">Stripe</option>
-                <option value="other">Other / Custom</option>
-              </optgroup>
+              <option value="">All Platform Services ({platformKeys.length})</option>
+              <option value="elevenlabs">ElevenLabs (Voice & Audio)</option>
+              <option value="cloudinary">Cloudinary</option>
+              <option value="aws">AWS (Amazon Web Services)</option>
+              <option value="redis">Redis</option>
+              <option value="upstash">Upstash</option>
+              <option value="googlecloud">Google Cloud</option>
+              <option value="googleconsole">Google Console</option>
+              <option value="cloudflare">Cloudflare</option>
+              <option value="telegram">Telegram</option>
+              <option value="github">GitHub</option>
+              <option value="stripe">Stripe</option>
+              <option value="other">Other / Custom</option>
             </select>
 
             {/* Folder Select */}
             <select
               value={activeFolderId || ''}
               onChange={(e) => setActiveFolderId(e.target.value || null)}
-              className="bg-zinc-900/80 border border-zinc-800 rounded-lg text-xs text-zinc-300 px-3 py-1.5 focus:outline-none focus:border-purple-500/80"
+              className="bg-zinc-900/80 border border-zinc-800 rounded-lg text-xs text-zinc-300 px-3 py-1.5 focus:outline-none focus:border-sky-500"
             >
               <option value="">All Workspaces / Folders</option>
               {folders.map((f: any) => (
@@ -766,7 +656,7 @@ export default function KeysPage() {
             {(searchQuery || providerFilter || statusFilter || activeFolderId || activeTagIds.length > 0) && (
               <button
                 onClick={resetFilters}
-                className="text-xs text-purple-400 hover:text-purple-300 font-semibold px-2 py-1 bg-purple-500/10 rounded-lg cursor-pointer transition-colors"
+                className="text-xs text-sky-400 hover:text-sky-300 font-semibold px-2 py-1 bg-sky-500/10 rounded-lg cursor-pointer transition-colors"
               >
                 Clear Filters
               </button>
@@ -774,22 +664,46 @@ export default function KeysPage() {
           </div>
         </div>
 
-        {/* View Mode: Table or Grid */}
+        {/* Bulk Actions Banner */}
+        {selectedKeyIds.length > 0 && (
+          <div className="p-3 bg-sky-950/40 border border-sky-500/30 rounded-xl flex items-center justify-between">
+            <span className="text-xs text-sky-200 font-semibold">
+              {selectedKeyIds.length} secrets selected
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleBulkValidate}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                <RefreshCw className="w-3 h-3" /> Re-probe Selected
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3 h-3" /> Delete Selected
+              </button>
+              <button
+                onClick={() => setSelectedKeyIds([])}
+                className="text-xs text-zinc-400 hover:text-white px-2 py-1 cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Content Views */}
         {isLoadingKeys ? (
-          <TableSkeleton rows={5} cols={6} />
+          <TableSkeleton />
         ) : filteredKeys.length === 0 ? (
           <EmptyState
-            icon={<Key className="w-12 h-12 text-purple-400" />}
-            title="No API Keys Found"
-            description={
-              keys.length === 0
-                ? "You haven't vaulted any API keys yet. Add an OpenAI, Anthropic, Gemini, or Groq key to get started."
-                : 'No keys match your current filter parameters.'
-            }
-            action={{ label: 'Vault Your First API Key', onClick: () => setIsKeyModalOpen(true) }}
+            icon={<ShieldCheck className="w-12 h-12 text-sky-400" />}
+            title="No Platform Secrets Vaulted"
+            description="Securely store and health-probe credentials for Cloudinary, AWS, Redis, Google Cloud, Stripe, or custom APIs."
+            action={{ label: 'Vault Your First Secret', onClick: () => setIsKeyModalOpen(true) }}
           />
         ) : viewMode === 'table' ? (
-          /* Table View */
           <div className="glass-panel rounded-xl overflow-hidden border border-[#1e1e24] overflow-x-auto shadow-xl">
             <table className="w-full text-left border-collapse min-w-[800px]">
               <thead>
@@ -802,12 +716,12 @@ export default function KeysPage() {
                         if (e.target.checked) setSelectedKeyIds(filteredKeys.map((k: any) => k.id))
                         else setSelectedKeyIds([])
                       }}
-                      className="rounded border-zinc-700 bg-zinc-900 text-purple-600 focus:ring-0 cursor-pointer"
+                      className="rounded border-zinc-700 bg-zinc-900 text-sky-600 focus:ring-0 cursor-pointer"
                     />
                   </th>
-                  <th className="p-4">Provider & API Name</th>
-                  <th className="p-4">Validity & Secret</th>
-                  <th className="p-4">Capabilities / Working Models</th>
+                  <th className="p-4">Platform & Service Name</th>
+                  <th className="p-4">Vaulted Secret & Status</th>
+                  <th className="p-4">Platform Capabilities & SDK</th>
                   <th className="p-4">Folder & Tags</th>
                   <th className="p-4">Health Probe</th>
                   <th className="p-4 text-right">Actions</th>
@@ -818,10 +732,10 @@ export default function KeysPage() {
                   const isSecretVisible = revealedKeyId === key.id
                   const isCopied = copiedKeyId === key.id
                   const isValid = key.status === 'Working'
+                  const platform = PLATFORM_CONFIG[key.providerCode.toLowerCase()] || PLATFORM_CONFIG.other
 
                   return (
                     <tr key={key.id} className="hover:bg-zinc-900/40 transition-colors group">
-                      {/* Checkbox */}
                       <td className="p-4">
                         <input
                           type="checkbox"
@@ -831,11 +745,10 @@ export default function KeysPage() {
                               prev.includes(key.id) ? prev.filter((i) => i !== key.id) : [...prev, key.id]
                             )
                           }
-                          className="rounded border-zinc-700 bg-zinc-900 text-purple-600 focus:ring-0 cursor-pointer"
+                          className="rounded border-zinc-700 bg-zinc-900 text-sky-600 focus:ring-0 cursor-pointer"
                         />
                       </td>
 
-                      {/* Provider & Key */}
                       <td className="p-4">
                         <div className="flex items-start gap-3">
                           <div className="mt-0.5">
@@ -843,15 +756,9 @@ export default function KeysPage() {
                           </div>
                           <div>
                             <span className="font-bold text-white text-sm block leading-tight">{key.keyName}</span>
-                            {key.description ? (
-                              <span className="text-[11px] text-zinc-400 truncate max-w-xs block mt-0.5">
-                                {key.description}
-                              </span>
-                            ) : (
-                              <span className="text-[10px] text-zinc-600 font-mono mt-0.5 block">
-                                ID: {key.id.slice(0, 8)}...
-                              </span>
-                            )}
+                            <span className="text-[11px] text-zinc-400 block mt-0.5">
+                              {platform.category} {key.description ? `• ${key.description}` : ''}
+                            </span>
                             {(key.accountEmail || key.accountPhone) && (
                               <div className="flex items-center gap-2 mt-1 flex-wrap">
                                 {key.accountEmail && (
@@ -872,7 +779,6 @@ export default function KeysPage() {
                         </div>
                       </td>
 
-                      {/* Validity & Secret Status */}
                       <td className="p-4">
                         <div className="flex flex-col gap-1.5">
                           <StatusBadge status={key.status} />
@@ -899,7 +805,7 @@ export default function KeysPage() {
                                   if (res.plainApiKey) copyToClipboard(res.plainApiKey, key.id)
                                 })
                               }}
-                              className="p-1 hover:bg-zinc-800 rounded text-zinc-400 hover:text-purple-400 transition-colors cursor-pointer"
+                              className="p-1 hover:bg-zinc-800 rounded text-zinc-400 hover:text-sky-400 transition-colors cursor-pointer"
                               title="Copy Secret"
                             >
                               {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Clipboard className="w-3.5 h-3.5" />}
@@ -908,44 +814,17 @@ export default function KeysPage() {
                         </div>
                       </td>
 
-                      {/* Capabilities / Working Models */}
                       <td className="p-4">
-                        {AI_MODEL_PROVIDERS.includes(key.providerCode.toLowerCase()) ? (
-                          isValid ? (
-                            <button
-                              onClick={() => setInspectingKeyForModels(key)}
-                              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-300 font-semibold text-xs transition-all cursor-pointer shadow-xs group/btn"
-                            >
-                              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-                              <span>View Working Models</span>
-                              <ChevronRight className="w-3 h-3 text-zinc-400 group-hover/btn:translate-x-0.5 transition-transform" />
-                            </button>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 text-xs text-zinc-500 italic">
-                              <XCircle className="w-3.5 h-3.5 text-red-400/80" />
-                              <span>No models (Key invalid)</span>
-                            </span>
-                          )
-                        ) : (
-                          isValid ? (
-                            <button
-                              onClick={() => setInspectingKeyForModels(key)}
-                              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 text-sky-300 font-semibold text-xs transition-all cursor-pointer shadow-xs group/btn"
-                            >
-                              <span>{PLATFORM_CONFIG[key.providerCode.toLowerCase()]?.icon || '⚡'}</span>
-                              <span>{PLATFORM_CONFIG[key.providerCode.toLowerCase()]?.category || 'Platform Service'}</span>
-                              <ChevronRight className="w-3 h-3 text-zinc-400 group-hover/btn:translate-x-0.5 transition-transform" />
-                            </button>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 text-xs text-red-400/80 italic">
-                              <XCircle className="w-3.5 h-3.5 text-red-400/80" />
-                              <span>Platform Auth Failed</span>
-                            </span>
-                          )
-                        )}
+                        <button
+                          onClick={() => setInspectingPlatformKey(key)}
+                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 text-sky-300 font-semibold text-xs transition-all cursor-pointer shadow-xs group/btn"
+                        >
+                          <span>{platform.icon}</span>
+                          <span>{platform.capabilities[0] || 'Active Service'}</span>
+                          <ChevronRight className="w-3 h-3 text-zinc-400 group-hover/btn:translate-x-0.5 transition-transform" />
+                        </button>
                       </td>
 
-                      {/* Folder & Tags */}
                       <td className="p-4">
                         <div className="space-y-1.5">
                           {key.folderId ? (
@@ -960,7 +839,7 @@ export default function KeysPage() {
                             {key.tags && key.tags.map((tag: any) => (
                               <span
                                 key={tag.id}
-                                className="px-2 py-0.5 rounded-full text-[9px] font-semibold border"
+                                className="px-1.5 py-0.5 rounded text-[9px] font-semibold border"
                                 style={{
                                   borderColor: `${tag.color}40`,
                                   backgroundColor: `${tag.color}15`,
@@ -974,63 +853,42 @@ export default function KeysPage() {
                         </div>
                       </td>
 
-                      {/* Monitoring */}
                       <td className="p-4">
-                        <div className="flex items-center gap-2.5">
-                          <label className="relative inline-flex items-center cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={key.isMonitoringEnabled}
-                              onChange={(e) => {
-                                updateKeyMutation.mutate({
-                                  id: key.id,
-                                  payload: { isMonitoringEnabled: e.target.checked },
-                                })
-                              }}
-                              className="sr-only peer"
-                            />
-                            <div className="w-8 h-4.5 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-400 after:border-zinc-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-purple-600 peer-checked:after:bg-white" />
-                          </label>
-                          {key.isMonitoringEnabled && (
-                            <span className="text-[10px] text-zinc-400 font-mono bg-zinc-900/60 px-2 py-0.5 rounded border border-zinc-800/80">
-                              {key.monitoringFrequency}m
-                            </span>
-                          )}
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[11px] text-zinc-400 font-mono flex items-center gap-1.5">
+                            <span className={`w-1.5 h-1.5 rounded-full ${isValid ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                            {key.isMonitoringEnabled ? `Every ${key.monitoringFrequency}m` : 'Off'}
+                          </span>
+                          <span className="text-[10px] text-zinc-500">
+                            {key.lastValidatedAt ? new Date(key.lastValidatedAt).toLocaleTimeString() : 'Not probed'}
+                          </span>
                         </div>
                       </td>
 
-                      {/* Actions */}
                       <td className="p-4 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Link
-                            href={`/playground?keyId=${key.id}`}
-                            className="p-1.5 hover:bg-purple-600/10 text-zinc-400 hover:text-purple-400 rounded-lg transition-colors cursor-pointer"
-                            title="Open in Playground Console"
-                          >
-                            <Terminal className="w-3.5 h-3.5" />
-                          </Link>
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
                             onClick={() => validateKeyMutation.mutate(key.id)}
                             className="p-1.5 hover:bg-zinc-800 text-zinc-400 hover:text-emerald-400 rounded-lg transition-colors cursor-pointer"
-                            title="Trigger Immediate Health Validation"
+                            title="Run Probe Ping"
                           >
                             <RefreshCw className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => setEditingKey({ ...key, tagIds: key.tags ? key.tags.map((t: any) => t.id) : [] })}
-                            className="p-1.5 hover:bg-zinc-800 text-zinc-400 hover:text-purple-400 rounded-lg transition-colors cursor-pointer"
-                            title="Edit Key"
+                            className="p-1.5 hover:bg-zinc-800 text-zinc-400 hover:text-sky-400 rounded-lg transition-colors cursor-pointer"
+                            title="Edit Secret Metadata"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => {
-                              if (confirm('Permanently remove this API key from the vault?')) {
+                              if (confirm('Remove this secret from your vault?')) {
                                 deleteKeyMutation.mutate(key.id)
                               }
                             }}
-                            className="p-1.5 hover:bg-red-500/10 text-zinc-400 hover:text-red-400 rounded-lg transition-colors cursor-pointer"
-                            title="Delete"
+                            className="p-1.5 hover:bg-zinc-800 text-zinc-400 hover:text-red-400 rounded-lg transition-colors cursor-pointer"
+                            title="Delete Secret"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -1043,30 +901,28 @@ export default function KeysPage() {
             </table>
           </div>
         ) : (
-          /* Grid Cards View */
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          /* Grid View */
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {filteredKeys.map((key: any) => {
               const isSecretVisible = revealedKeyId === key.id
               const isCopied = copiedKeyId === key.id
               const isValid = key.status === 'Working'
+              const platform = PLATFORM_CONFIG[key.providerCode.toLowerCase()] || PLATFORM_CONFIG.other
 
               return (
-                <div key={key.id} className="glass-card rounded-xl p-5 border border-[#1e1e24] flex flex-col justify-between space-y-4">
+                <div key={key.id} className="glass-panel p-4 rounded-xl border border-[#1e1e24] flex flex-col justify-between space-y-4 hover:border-zinc-700 transition-all">
                   <div className="space-y-3">
                     <div className="flex items-start justify-between gap-2">
-                      <ProviderBadge provider={key.providerCode} />
+                      <div className="space-y-1">
+                        <ProviderBadge provider={key.providerCode} />
+                        <h4 className="font-bold text-white text-sm mt-1">{key.keyName}</h4>
+                        <p className="text-[11px] text-zinc-400">{platform.category}</p>
+                      </div>
                       <StatusBadge status={key.status} />
                     </div>
 
-                    <div>
-                      <h4 className="text-white font-bold text-base leading-tight truncate">{key.keyName}</h4>
-                      <p className="text-xs text-zinc-400 mt-1 line-clamp-2">
-                        {key.description || 'No description provided.'}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center justify-between p-2 rounded-lg bg-zinc-950/60 border border-zinc-800/80 font-mono text-xs text-zinc-400">
-                      <span>{isSecretVisible ? key.plainApiKey || '••••••••' : '••••••••••••••••'}</span>
+                    <div className="flex items-center justify-between p-2 rounded-lg bg-zinc-950/60 border border-zinc-800 font-mono text-xs text-zinc-300">
+                      <span>{isSecretVisible ? key.plainApiKey || 'No secret' : '••••••••••••••••'}</span>
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => {
@@ -1088,71 +944,23 @@ export default function KeysPage() {
                               if (res.plainApiKey) copyToClipboard(res.plainApiKey, key.id)
                             })
                           }}
-                          className="p-1 hover:bg-zinc-800 rounded text-zinc-400 hover:text-purple-400 cursor-pointer"
+                          className="p-1 hover:bg-zinc-800 rounded text-zinc-400 hover:text-sky-400 cursor-pointer"
                         >
                           {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Clipboard className="w-3.5 h-3.5" />}
                         </button>
                       </div>
                     </div>
 
-                    {/* Capabilities / Working Models Button on Card */}
-                    <div className="pt-2">
-                      {AI_MODEL_PROVIDERS.includes(key.providerCode.toLowerCase()) ? (
-                        isValid ? (
-                          <button
-                            onClick={() => setInspectingKeyForModels(key)}
-                            className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-300 font-semibold text-xs transition-all cursor-pointer"
-                          >
-                            <span className="flex items-center gap-1.5">
-                              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-                              View Working Models
-                            </span>
-                            <ChevronRight className="w-3.5 h-3.5" />
-                          </button>
-                        ) : (
-                          <div className="flex items-center gap-1.5 text-xs text-zinc-500 italic px-2 py-1">
-                            <XCircle className="w-3.5 h-3.5 text-red-400" />
-                            <span>No models (Key invalid)</span>
-                          </div>
-                        )
-                      ) : (
-                        isValid ? (
-                          <button
-                            onClick={() => setInspectingKeyForModels(key)}
-                            className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 text-sky-300 font-semibold text-xs transition-all cursor-pointer"
-                          >
-                            <span className="flex items-center gap-1.5">
-                              <span>{PLATFORM_CONFIG[key.providerCode.toLowerCase()]?.icon || '⚡'}</span>
-                              {PLATFORM_CONFIG[key.providerCode.toLowerCase()]?.category || 'Platform Service'}
-                            </span>
-                            <ChevronRight className="w-3.5 h-3.5" />
-                          </button>
-                        ) : (
-                          <div className="flex items-center gap-1.5 text-xs text-red-400 italic px-2 py-1">
-                            <XCircle className="w-3.5 h-3.5" />
-                            <span>Platform Auth Failed</span>
-                          </div>
-                        )
-                      )}
-                    </div>
-
-                    {key.tags && key.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {key.tags.map((tag: any) => (
-                          <span
-                            key={tag.id}
-                            className="px-2 py-0.5 rounded-full text-[9px] font-semibold border"
-                            style={{
-                              borderColor: `${tag.color}40`,
-                              backgroundColor: `${tag.color}15`,
-                              color: tag.color,
-                            }}
-                          >
-                            {tag.name}
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                    <button
+                      onClick={() => setInspectingPlatformKey(key)}
+                      className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 text-sky-300 font-semibold text-xs transition-all cursor-pointer"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <span>{platform.icon}</span>
+                        {platform.capabilities[0]}
+                      </span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
                   </div>
 
                   <div className="pt-3 border-t border-zinc-800/60 flex items-center justify-between text-xs">
@@ -1169,16 +977,16 @@ export default function KeysPage() {
                       </button>
                       <button
                         onClick={() => setEditingKey({ ...key, tagIds: key.tags ? key.tags.map((t: any) => t.id) : [] })}
-                        className="p-1.5 hover:bg-zinc-800 text-zinc-400 hover:text-purple-400 rounded-lg cursor-pointer"
+                        className="p-1.5 hover:bg-zinc-800 text-zinc-400 hover:text-sky-400 rounded-lg cursor-pointer"
                         title="Edit"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => {
-                          if (confirm('Delete API key?')) deleteKeyMutation.mutate(key.id)
+                          if (confirm('Delete this secret?')) deleteKeyMutation.mutate(key.id)
                         }}
-                        className="p-1.5 hover:bg-red-500/10 text-zinc-400 hover:text-red-400 rounded-lg cursor-pointer"
+                        className="p-1.5 hover:bg-zinc-800 text-zinc-400 hover:text-red-400 rounded-lg cursor-pointer"
                         title="Delete"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -1192,98 +1000,42 @@ export default function KeysPage() {
         )}
       </div>
 
-      {/* Available Working Models Modal */}
-      {inspectingKeyForModels && (
-        <WorkingModelsModal
-          apiKey={inspectingKeyForModels}
-          onClose={() => setInspectingKeyForModels(null)}
-        />
-      )}
-
-      {/* Floating Bulk Selection Action Bar */}
-      {selectedKeyIds.length > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 glass-panel px-5 py-3 rounded-2xl border border-purple-500/40 shadow-2xl flex items-center gap-4 animate-in fade-in slide-in-from-bottom-4 duration-200">
-          <span className="text-xs font-bold text-white font-mono">
-            {selectedKeyIds.length} {selectedKeyIds.length === 1 ? 'key' : 'keys'} selected
-          </span>
-          <div className="h-4 w-px bg-zinc-800" />
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleBulkValidate}
-              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white transition-colors cursor-pointer flex items-center gap-1.5"
-            >
-              <RefreshCw className="w-3 h-3" /> Re-probe Selected
-            </button>
-            <button
-              onClick={handleBulkDelete}
-              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-600/80 hover:bg-red-500 text-white transition-colors cursor-pointer flex items-center gap-1.5"
-            >
-              <Trash2 className="w-3 h-3" /> Delete Selected
-            </button>
-            <button
-              onClick={() => setSelectedKeyIds([])}
-              className="text-xs text-zinc-400 hover:text-white px-2 py-1 cursor-pointer"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Add Key Modal */}
+      {/* Vault New Platform Secret Modal */}
       <Modal
         isOpen={isKeyModalOpen}
         onClose={() => {
           setIsKeyModalOpen(false)
           resetKeyForm()
         }}
-        title={vaultCategory === 'ai' ? 'Vault New AI Model Key' : 'Vault Platform & Cloud Secret'}
+        title={vaultCategory === 'platform' ? 'Vault Platform & Cloud Secret' : 'Vault New AI Model Key'}
         subtitle={
-          vaultCategory === 'ai'
-            ? 'Hardware-grade AES-256-GCM encryption with automated health & model discovery'
-            : 'Store encrypted cloud tokens, database credentials, media keys & webhooks'
+          vaultCategory === 'platform'
+            ? 'Zero-knowledge AES-256 encrypted credential storage for infrastructure, media & cloud APIs'
+            : 'Hardware-grade AES-256-GCM encryption with automated health & model discovery'
         }
         icon={
-          vaultCategory === 'ai' ? (
-            <Sparkles className="w-5 h-5 text-purple-400" />
-          ) : (
+          vaultCategory === 'platform' ? (
             <ShieldCheck className="w-5 h-5 text-sky-400" />
+          ) : (
+            <Sparkles className="w-5 h-5 text-purple-400" />
           )
         }
         badge={
-          vaultCategory === 'ai' ? (
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-purple-500/10 text-purple-400 border border-purple-500/20">
-              AI Foundation Models
-            </span>
-          ) : (
+          vaultCategory === 'platform' ? (
             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-sky-500/10 text-sky-400 border border-sky-500/20">
               Platform & Cloud
+            </span>
+          ) : (
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-purple-500/10 text-purple-400 border border-purple-500/20">
+              AI Foundation Models
             </span>
           )
         }
         maxWidth="xl"
       >
         <form onSubmit={handleCreateKey} className="space-y-4">
-          {/* Category Switcher: AI Models vs Platform/Cloud Secret */}
+          {/* Category Switcher: Platform vs AI */}
           <div className="flex p-1 bg-zinc-950/80 rounded-xl border border-white/10 mb-2">
-            <button
-              type="button"
-              onClick={() => {
-                setVaultCategory('ai')
-                if (!AI_MODEL_PROVIDERS.includes(newKeyProvider.toLowerCase())) {
-                  setNewKeyProvider('openai')
-                }
-              }}
-              className={clsx(
-                'flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer',
-                vaultCategory === 'ai'
-                  ? 'bg-purple-600/30 text-purple-300 border border-purple-500/40 shadow-sm'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              )}
-            >
-              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-              <span>AI Foundation Model Key</span>
-            </button>
             <button
               type="button"
               onClick={() => {
@@ -1302,42 +1054,46 @@ export default function KeysPage() {
               <ShieldCheck className="w-3.5 h-3.5 text-sky-400" />
               <span>Platform & Cloud Secret</span>
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                setVaultCategory('ai')
+                if (!AI_MODEL_PROVIDERS.includes(newKeyProvider.toLowerCase())) {
+                  setNewKeyProvider('openai')
+                }
+              }}
+              className={clsx(
+                'flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer',
+                vaultCategory === 'ai'
+                  ? 'bg-purple-600/30 text-purple-300 border border-purple-500/40 shadow-sm'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              )}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+              <span>AI Foundation Model Key</span>
+            </button>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-                Key Identifier Name <span className="text-rose-400">*</span>
+                {vaultCategory === 'platform' ? 'Secret / Platform Identifier' : 'Key Identifier Name'} <span className="text-rose-400">*</span>
               </label>
               <input
                 type="text"
-                placeholder={vaultCategory === 'ai' ? 'e.g. Production GPT-4o Enterprise' : 'e.g. Production AWS S3 Key'}
+                placeholder={vaultCategory === 'platform' ? 'e.g. Production AWS S3 Key' : 'e.g. Production GPT-4o Enterprise'}
                 value={newKeyName}
                 onChange={(e) => setNewKeyName(e.target.value)}
                 required
-                className="w-full bg-zinc-900/90 border border-zinc-700/60 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-zinc-500 outline-none transition-all"
+                className="w-full bg-zinc-900/90 border border-zinc-700/60 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-zinc-500 outline-none transition-all"
               />
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-                {vaultCategory === 'ai' ? 'AI Model Provider' : 'Platform / Service'} <span className="text-rose-400">*</span>
+                {vaultCategory === 'platform' ? 'Platform / Service' : 'AI Model Provider'} <span className="text-rose-400">*</span>
               </label>
-              {vaultCategory === 'ai' ? (
-                <select
-                  value={newKeyProvider}
-                  onChange={(e) => setNewKeyProvider(e.target.value)}
-                  className="w-full bg-zinc-900/90 border border-zinc-700/60 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 rounded-xl px-3.5 py-2.5 text-sm text-white outline-none transition-all"
-                >
-                  <option value="openai">OpenAI (GPT-4o, o1, o3-mini)</option>
-                  <option value="gemini">Google Gemini (1.5 Pro, 2.0 Flash)</option>
-                  <option value="anthropic">Anthropic Claude (3.5 Sonnet, Opus)</option>
-                  <option value="groq">Groq LPU (Llama 3.3, Mixtral)</option>
-                  <option value="deepseek">DeepSeek (V3, R1 Reasoner)</option>
-                  <option value="together">Together AI (Open Models)</option>
-                  <option value="openrouter">OpenRouter Unified Gateway</option>
-                </select>
-              ) : (
+              {vaultCategory === 'platform' ? (
                 <select
                   value={newKeyProvider}
                   onChange={(e) => setNewKeyProvider(e.target.value)}
@@ -1366,6 +1122,20 @@ export default function KeysPage() {
                     <option value="other">Other / Custom Platform API</option>
                   </optgroup>
                 </select>
+              ) : (
+                <select
+                  value={newKeyProvider}
+                  onChange={(e) => setNewKeyProvider(e.target.value)}
+                  className="w-full bg-zinc-900/90 border border-zinc-700/60 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 rounded-xl px-3.5 py-2.5 text-sm text-white outline-none transition-all"
+                >
+                  <option value="openai">OpenAI (GPT-4o, o1, o3-mini)</option>
+                  <option value="gemini">Google Gemini (1.5 Pro, 2.0 Flash)</option>
+                  <option value="anthropic">Anthropic Claude (3.5 Sonnet, Opus)</option>
+                  <option value="groq">Groq LPU (Llama 3.3, Mixtral)</option>
+                  <option value="deepseek">DeepSeek (V3, R1 Reasoner)</option>
+                  <option value="together">Together AI (Open Models)</option>
+                  <option value="openrouter">OpenRouter Unified Gateway</option>
+                </select>
               )}
             </div>
           </div>
@@ -1373,10 +1143,10 @@ export default function KeysPage() {
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <label className="text-xs font-semibold text-zinc-300">
-                Secret API Key / Token <span className="text-rose-400">*</span>
+                Secret Credentials / Key <span className="text-rose-400">*</span>
               </label>
-              <span className="text-[11px] font-mono text-purple-400 flex items-center gap-1">
-                <ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
+              <span className="text-[11px] font-mono text-sky-400 flex items-center gap-1">
+                <ShieldCheck className="w-3.5 h-3.5 text-sky-400" />
                 Zero-Knowledge AES-256
               </span>
             </div>
@@ -1384,11 +1154,11 @@ export default function KeysPage() {
             <div className="relative flex items-center">
               <input
                 type={showNewSecret ? 'text' : 'password'}
-                placeholder={PLATFORM_CONFIG[newKeyProvider.toLowerCase()]?.placeholder || 'Paste secret API key...'}
+                placeholder={PLATFORM_CONFIG[newKeyProvider.toLowerCase()]?.placeholder || 'Paste secret credentials...'}
                 value={newKeySecret}
                 onChange={(e) => setNewKeySecret(e.target.value)}
                 required
-                className="w-full bg-zinc-900/90 border border-zinc-700/60 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 rounded-xl pl-3.5 pr-24 py-2.5 text-sm font-mono text-white placeholder-zinc-600 outline-none transition-all"
+                className="w-full bg-zinc-900/90 border border-zinc-700/60 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl pl-3.5 pr-24 py-2.5 text-sm font-mono text-white placeholder-zinc-600 outline-none transition-all"
               />
               <div className="absolute right-2 flex items-center gap-1">
                 <button
@@ -1412,7 +1182,7 @@ export default function KeysPage() {
             </div>
 
             <div className="flex items-center justify-between text-[11px] text-zinc-400 px-1 pt-0.5">
-              <span>{PLATFORM_CONFIG[newKeyProvider.toLowerCase()]?.hint || 'Encrypted at rest with AES-256 GCM'}</span>
+              <span>{PLATFORM_CONFIG[newKeyProvider.toLowerCase()]?.hint || 'Encrypted with AES-256 GCM'}</span>
               <span className="text-zinc-500">Key is never stored in plaintext</span>
             </div>
           </div>
@@ -1430,7 +1200,7 @@ export default function KeysPage() {
                   placeholder="e.g. dev@company.com"
                   value={newKeyAccountEmail}
                   onChange={(e) => setNewKeyAccountEmail(e.target.value)}
-                  className="w-full bg-zinc-900/90 border border-zinc-700/60 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 rounded-xl pl-8 pr-3 py-2 text-xs text-white placeholder-zinc-600 outline-none transition-all"
+                  className="w-full bg-zinc-900/90 border border-zinc-700/60 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl pl-8 pr-3 py-2 text-xs text-white placeholder-zinc-600 outline-none transition-all"
                 />
                 <Mail className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
               </div>
@@ -1447,7 +1217,7 @@ export default function KeysPage() {
                   placeholder="e.g. +1 555-0199"
                   value={newKeyAccountPhone}
                   onChange={(e) => setNewKeyAccountPhone(e.target.value)}
-                  className="w-full bg-zinc-900/90 border border-zinc-700/60 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 rounded-xl pl-8 pr-3 py-2 text-xs text-white placeholder-zinc-600 outline-none transition-all"
+                  className="w-full bg-zinc-900/90 border border-zinc-700/60 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl pl-8 pr-3 py-2 text-xs text-white placeholder-zinc-600 outline-none transition-all"
                 />
                 <Phone className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
               </div>
@@ -1460,10 +1230,10 @@ export default function KeysPage() {
             </label>
             <input
               type="text"
-              placeholder="e.g. Primary cluster key with tier 5 quotas & production billing..."
+              placeholder="e.g. Production cluster asset storage in eu-central-1..."
               value={newKeyDesc}
               onChange={(e) => setNewKeyDesc(e.target.value)}
-              className="w-full bg-zinc-900/90 border border-zinc-700/60 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-zinc-500 outline-none transition-all"
+              className="w-full bg-zinc-900/90 border border-zinc-700/60 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-zinc-500 outline-none transition-all"
             />
           </div>
 
@@ -1475,7 +1245,7 @@ export default function KeysPage() {
               <select
                 value={newKeyFolder}
                 onChange={(e) => setNewKeyFolder(e.target.value)}
-                className="w-full bg-zinc-900/90 border border-zinc-700/60 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 rounded-xl px-3.5 py-2.5 text-sm text-white outline-none transition-all"
+                className="w-full bg-zinc-900/90 border border-zinc-700/60 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl px-3.5 py-2.5 text-sm text-white outline-none transition-all"
               >
                 <option value="">📁 No Folder (Unassigned)</option>
                 {folders.map((f: any) => (
@@ -1490,7 +1260,7 @@ export default function KeysPage() {
                   Custom Tags
                 </label>
                 {newKeyTags.length > 0 && (
-                  <span className="text-[10px] text-purple-400 font-medium">{newKeyTags.length} selected</span>
+                  <span className="text-[10px] text-sky-400 font-medium">{newKeyTags.length} selected</span>
                 )}
               </div>
               <div className="flex flex-wrap gap-1.5 border border-zinc-800 bg-zinc-950/60 p-2.5 rounded-xl min-h-[44px] max-h-24 overflow-y-auto custom-scrollbar">
@@ -1526,42 +1296,6 @@ export default function KeysPage() {
             </div>
           </div>
 
-          <div className="p-3.5 rounded-xl border border-white/10 bg-zinc-900/40 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <label className={`relative inline-flex items-center ${newKeyProvider === 'other' ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}>
-                <input
-                  type="checkbox"
-                  checked={newKeyMonitor}
-                  onChange={(e) => setNewKeyMonitor(e.target.checked)}
-                  disabled={newKeyProvider === 'other'}
-                  className="sr-only peer"
-                />
-                <div className="w-10 h-5 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-400 after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600 peer-checked:after:bg-white" />
-              </label>
-              <div>
-                <span className="text-xs font-semibold text-white block">Continuous Health Monitor</span>
-                <span className="text-[11px] text-zinc-400">Auto probe uptime & latency</span>
-              </div>
-            </div>
-
-            {newKeyMonitor && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-zinc-400">Frequency:</span>
-                <select
-                  value={newKeyFrequency}
-                  onChange={(e) => setNewKeyFrequency(Number(e.target.value))}
-                  className="bg-zinc-900 border border-zinc-700/60 rounded-lg text-xs text-white px-2.5 py-1.5 focus:outline-none focus:border-purple-500"
-                >
-                  <option value="15">15 Min</option>
-                  <option value="30">30 Min</option>
-                  <option value="60">1 Hour</option>
-                  <option value="360">6 Hours</option>
-                  <option value="1440">24 Hours</option>
-                </select>
-              </div>
-            )}
-          </div>
-
           <div className="pt-2 flex items-center justify-end gap-3 border-t border-white/10">
             <Button
               type="button"
@@ -1580,19 +1314,19 @@ export default function KeysPage() {
               loading={createKeyMutation.isPending}
               className={clsx(
                 'shadow-lg px-5 text-white',
-                vaultCategory === 'ai'
-                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-purple-600/25'
-                  : 'bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 shadow-sky-600/25'
+                vaultCategory === 'platform'
+                  ? 'bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 shadow-sky-600/25'
+                  : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-purple-600/25'
               )}
             >
               <ShieldCheck className="w-4 h-4 mr-2" />
-              {vaultCategory === 'ai' ? 'Securely Vault AI Key' : 'Securely Vault Platform Secret'}
+              {vaultCategory === 'platform' ? 'Securely Vault Secret' : 'Securely Vault AI Key'}
             </Button>
           </div>
         </form>
       </Modal>
 
-      {/* Edit Key Modal */}
+      {/* Edit Secret Modal */}
       <Modal
         isOpen={!!editingKey}
         onClose={() => {
@@ -1600,9 +1334,9 @@ export default function KeysPage() {
           setEditSecretValue('')
           setShowEditSecret(false)
         }}
-        title="Edit API Key"
-        subtitle="Manage key identifier, rotate secret credentials, or re-organize tags & folders"
-        icon={<Edit2 className="w-5 h-5 text-purple-400" />}
+        title="Edit Platform Secret"
+        subtitle="Manage secret identifier, rotate credential keys, or re-organize tags & folders"
+        icon={<Edit2 className="w-5 h-5 text-sky-400" />}
         badge={
           editingKey?.status ? (
             <StatusBadge status={editingKey.status} />
@@ -1614,23 +1348,23 @@ export default function KeysPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-                Key Identifier Name <span className="text-rose-400">*</span>
+                Secret Identifier Name <span className="text-rose-400">*</span>
               </label>
               <input
                 type="text"
                 value={editingKey?.keyName || ''}
                 onChange={(e) => setEditingKey((prev: any) => prev ? { ...prev, keyName: e.target.value } : null)}
                 required
-                className="w-full bg-zinc-900/90 border border-zinc-700/60 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 rounded-xl px-3.5 py-2.5 text-sm text-white outline-none transition-all"
+                className="w-full bg-zinc-900/90 border border-zinc-700/60 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl px-3.5 py-2.5 text-sm text-white outline-none transition-all"
               />
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-                Provider Ecosystem
+                Platform / Service
               </label>
               <div className="flex items-center gap-2 h-[42px] px-3.5 rounded-xl bg-zinc-900/90 border border-zinc-800">
-                <ProviderBadge provider={editingKey?.providerCode || 'openai'} />
+                <ProviderBadge provider={editingKey?.providerCode || 'other'} />
                 <span className="text-xs text-zinc-400 truncate">
                   {editingKey?.keyMask || 'Encrypted at Rest'}
                 </span>
@@ -1639,11 +1373,11 @@ export default function KeysPage() {
           </div>
 
           {/* Rotate Secret Key Card */}
-          <div className="p-3.5 rounded-xl border border-purple-500/20 bg-purple-500/5 space-y-2">
+          <div className="p-3.5 rounded-xl border border-sky-500/20 bg-sky-500/5 space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-purple-300 flex items-center gap-1.5">
-                <RefreshCw className="w-3.5 h-3.5 text-purple-400" />
-                Rotate Secret Key
+              <label className="text-xs font-semibold text-sky-300 flex items-center gap-1.5">
+                <RefreshCw className="w-3.5 h-3.5 text-sky-400" />
+                Rotate Secret Credentials
               </label>
               <span className="text-[11px] text-zinc-400 font-mono">
                 Leave blank to keep existing key
@@ -1653,10 +1387,10 @@ export default function KeysPage() {
             <div className="relative flex items-center">
               <input
                 type={showEditSecret ? 'text' : 'password'}
-                placeholder="Enter new secret key to rotate (or leave empty)..."
+                placeholder="Enter new secret credentials to rotate (or leave empty)..."
                 value={editSecretValue}
                 onChange={(e) => setEditSecretValue(e.target.value)}
-                className="w-full bg-zinc-900/90 border border-zinc-700/60 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 rounded-xl pl-3.5 pr-24 py-2.5 text-sm font-mono text-white placeholder-zinc-600 outline-none transition-all"
+                className="w-full bg-zinc-900/90 border border-zinc-700/60 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl pl-3.5 pr-24 py-2.5 text-sm font-mono text-white placeholder-zinc-600 outline-none transition-all"
               />
               <div className="absolute right-2 flex items-center gap-1">
                 <button
@@ -1679,7 +1413,7 @@ export default function KeysPage() {
               </div>
             </div>
             <p className="text-[11px] text-zinc-400">
-              Rotating credentials re-encrypts with AES-256 and triggers a health probe to refresh models.
+              Rotating credentials securely replaces the ciphertext in the vault with zero-knowledge AES-256 encryption.
             </p>
           </div>
 
@@ -1696,7 +1430,7 @@ export default function KeysPage() {
                   placeholder="e.g. dev@company.com"
                   value={editingKey?.accountEmail || ''}
                   onChange={(e) => setEditingKey((prev: any) => prev ? { ...prev, accountEmail: e.target.value } : null)}
-                  className="w-full bg-zinc-900/90 border border-zinc-700/60 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 rounded-xl pl-8 pr-3 py-2 text-xs text-white placeholder-zinc-600 outline-none transition-all"
+                  className="w-full bg-zinc-900/90 border border-zinc-700/60 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl pl-8 pr-3 py-2 text-xs text-white placeholder-zinc-600 outline-none transition-all"
                 />
                 <Mail className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
               </div>
@@ -1713,7 +1447,7 @@ export default function KeysPage() {
                   placeholder="e.g. +1 555-0199"
                   value={editingKey?.accountPhone || ''}
                   onChange={(e) => setEditingKey((prev: any) => prev ? { ...prev, accountPhone: e.target.value } : null)}
-                  className="w-full bg-zinc-900/90 border border-zinc-700/60 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 rounded-xl pl-8 pr-3 py-2 text-xs text-white placeholder-zinc-600 outline-none transition-all"
+                  className="w-full bg-zinc-900/90 border border-zinc-700/60 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl pl-8 pr-3 py-2 text-xs text-white placeholder-zinc-600 outline-none transition-all"
                 />
                 <Phone className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
               </div>
@@ -1728,8 +1462,8 @@ export default function KeysPage() {
               type="text"
               value={editingKey?.description || ''}
               onChange={(e) => setEditingKey((prev: any) => prev ? { ...prev, description: e.target.value } : null)}
-              placeholder="e.g. Cluster API key for generation pipeline..."
-              className="w-full bg-zinc-900/90 border border-zinc-700/60 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-zinc-500 outline-none transition-all"
+              placeholder="e.g. Production AWS S3 bucket for CDN storage..."
+              className="w-full bg-zinc-900/90 border border-zinc-700/60 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-zinc-500 outline-none transition-all"
             />
           </div>
 
@@ -1741,7 +1475,7 @@ export default function KeysPage() {
               <select
                 value={editingKey?.folderId || ''}
                 onChange={(e) => setEditingKey((prev: any) => prev ? { ...prev, folderId: e.target.value || null } : null)}
-                className="w-full bg-zinc-900/90 border border-zinc-700/60 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 rounded-xl px-3.5 py-2.5 text-sm text-white outline-none transition-all"
+                className="w-full bg-zinc-900/90 border border-zinc-700/60 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl px-3.5 py-2.5 text-sm text-white outline-none transition-all"
               >
                 <option value="">📁 No Folder (Unassigned)</option>
                 {folders.map((f: any) => (
@@ -1756,7 +1490,7 @@ export default function KeysPage() {
                   Custom Tags
                 </label>
                 {editingKey?.tagIds?.length > 0 && (
-                  <span className="text-[10px] text-purple-400 font-medium">{editingKey.tagIds.length} active</span>
+                  <span className="text-[10px] text-sky-400 font-medium">{editingKey.tagIds.length} active</span>
                 )}
               </div>
               <div className="flex flex-wrap gap-1.5 border border-zinc-800 bg-zinc-950/60 p-2.5 rounded-xl min-h-[44px] max-h-24 overflow-y-auto custom-scrollbar">
@@ -1793,41 +1527,6 @@ export default function KeysPage() {
             </div>
           </div>
 
-          <div className="p-3.5 rounded-xl border border-white/10 bg-zinc-900/40 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={editingKey?.isMonitoringEnabled || false}
-                  onChange={(e) => setEditingKey((prev: any) => prev ? { ...prev, isMonitoringEnabled: e.target.checked } : null)}
-                  className="sr-only peer"
-                />
-                <div className="w-10 h-5 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-400 after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600 peer-checked:after:bg-white" />
-              </label>
-              <div>
-                <span className="text-xs font-semibold text-white block">Continuous Health Monitor</span>
-                <span className="text-[11px] text-zinc-400">Automated probe uptime & latency verification</span>
-              </div>
-            </div>
-
-            {editingKey?.isMonitoringEnabled && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-zinc-400">Frequency:</span>
-                <select
-                  value={editingKey?.monitoringFrequency || 60}
-                  onChange={(e) => setEditingKey((prev: any) => prev ? { ...prev, monitoringFrequency: Number(e.target.value) } : null)}
-                  className="bg-zinc-900 border border-zinc-700/60 rounded-lg text-xs text-white px-2.5 py-1.5 focus:outline-none focus:border-purple-500"
-                >
-                  <option value="15">15 Min</option>
-                  <option value="30">30 Min</option>
-                  <option value="60">1 Hour</option>
-                  <option value="360">6 Hours</option>
-                  <option value="1440">24 Hours</option>
-                </select>
-              </div>
-            )}
-          </div>
-
           <div className="pt-2 flex items-center justify-end gap-3 border-t border-white/10">
             <Button
               type="button"
@@ -1845,153 +1544,48 @@ export default function KeysPage() {
               variant="primary"
               size="md"
               loading={updateKeyMutation.isPending}
-              className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-lg shadow-purple-600/25 px-5"
+              className="bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 shadow-lg shadow-sky-600/25 px-5"
             >
               Save Changes
             </Button>
           </div>
         </form>
       </Modal>
+
+      {/* Platform Integration Cockpit Modal */}
+      {inspectingPlatformKey && (
+        <PlatformIntegrationModal
+          secretKey={inspectingPlatformKey}
+          onClose={() => setInspectingPlatformKey(null)}
+        />
+      )}
     </div>
   )
 }
 
-function WorkingModelsModal({ apiKey, onClose }: { apiKey: any; onClose: () => void }) {
-  const [modelSearch, setModelSearch] = useState('')
-  const [copiedSlug, setCopiedSlug] = useState<string | null>(null)
+function PlatformIntegrationModal({ secretKey, onClose }: { secretKey: any; onClose: () => void }) {
   const [activeCodeTab, setActiveCodeTab] = useState<'curl' | 'js' | 'python'>('curl')
+  const [copiedSnippet, setCopiedSnippet] = useState(false)
+  const platform = PLATFORM_CONFIG[secretKey.providerCode.toLowerCase()] || PLATFORM_CONFIG.other
 
-  const isAI = AI_MODEL_PROVIDERS.includes(apiKey.providerCode.toLowerCase())
-  const platform = PLATFORM_CONFIG[apiKey.providerCode.toLowerCase()] || PLATFORM_CONFIG.other
-
-  const { data: models = [], isLoading } = useQuery({
-    queryKey: ['key-working-models', apiKey.id],
-    queryFn: () => api.getKeyModels(apiKey.id, false, false),
-    enabled: isAI,
-  })
-
-  const workingModels = useMemo(() => {
-    return models.filter((m: any) => m.verificationStatus === 'Working')
-  }, [models])
-
-  const filtered = useMemo(() => {
-    if (!modelSearch.trim()) return workingModels
-    const q = modelSearch.toLowerCase()
-    return workingModels.filter((m: any) =>
-      m.modelName.toLowerCase().includes(q) ||
-      (m.displayName && m.displayName.toLowerCase().includes(q))
-    )
-  }, [workingModels, modelSearch])
-
-  const copySlug = (slug: string) => {
-    navigator.clipboard.writeText(slug)
-    setCopiedSlug(slug)
-    toast.success(`Copied to clipboard`)
-    setTimeout(() => setCopiedSlug(null), 2000)
+  const copyCode = (code: string) => {
+    navigator.clipboard.writeText(code)
+    setCopiedSnippet(true)
+    toast.success('Integration snippet copied')
+    setTimeout(() => setCopiedSnippet(false), 2000)
   }
 
-  // If this is an AI Model Provider with models
-  if (isAI && (workingModels.length > 0 || isLoading)) {
-    return (
-      <Modal isOpen={true} onClose={onClose} title={`Available Working Models (${workingModels.length})`} maxWidth="lg">
-        <div className="space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
-            <div className="flex items-center gap-2">
-              <ProviderBadge provider={apiKey.providerCode} />
-              <span className="font-bold text-white text-sm">{apiKey.keyName}</span>
-            </div>
-            <span className="text-xs text-emerald-400 font-mono font-semibold bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
-              ● Key Valid & Active
-            </span>
-          </div>
-
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
-            <input
-              type="text"
-              placeholder="Search working models for this API key..."
-              value={modelSearch}
-              onChange={(e) => setModelSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
-            />
-          </div>
-
-          <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
-            {isLoading ? (
-              <div className="py-12 flex flex-col items-center justify-center text-zinc-500 text-xs gap-2">
-                <RefreshCw className="w-5 h-5 animate-spin text-purple-400" />
-                <span>Probing verified models on provider endpoint...</span>
-              </div>
-            ) : filtered.length === 0 ? (
-              <div className="py-12 text-center text-zinc-500 text-xs">
-                {workingModels.length === 0
-                  ? "No verified working models found for this API key yet."
-                  : "No models match your search."}
-              </div>
-            ) : (
-              filtered.map((model: any) => (
-                <div
-                  key={model.id}
-                  className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800 hover:border-zinc-700 flex items-center justify-between gap-3 text-xs group"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-zinc-100 truncate block">
-                        {model.displayName || model.modelName}
-                      </span>
-                      <button
-                        onClick={() => copySlug(model.modelName)}
-                        className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-purple-400 p-0.5 cursor-pointer"
-                        title="Copy model identifier"
-                      >
-                        {copiedSlug === model.modelName ? (
-                          <Check className="w-3 h-3 text-emerald-400" />
-                        ) : (
-                          <Copy className="w-3 h-3" />
-                        )}
-                      </button>
-                    </div>
-                    <span className="text-[10px] text-zinc-500 font-mono block truncate mt-0.5">
-                      {model.modelName}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-3 shrink-0">
-                    {model.latencyMs > 0 && (
-                      <span className="font-mono text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                        {model.latencyMs}ms
-                      </span>
-                    )}
-                    <Link
-                      href={`/playground?model=${encodeURIComponent(model.modelName)}&modelId=${model.id}&keyId=${apiKey.id}`}
-                      onClick={onClose}
-                      className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-white transition-colors"
-                    >
-                      <span>Test Prompt</span>
-                      <ArrowUpRight className="w-3 h-3" />
-                    </Link>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      </Modal>
-    )
-  }
-
-  // Cloud / Platform / Database Cockpit Modal
   return (
     <Modal isOpen={true} onClose={onClose} title={`${platform.name} Platform Integration`} maxWidth="lg">
       <div className="space-y-4">
-        {/* Header summary */}
+        {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
           <div className="flex items-center gap-2.5">
-            <span className="text-xl">{platform.icon}</span>
+            <span className="text-2xl">{platform.icon}</span>
             <div>
               <div className="flex items-center gap-2">
-                <ProviderBadge provider={apiKey.providerCode} />
-                <span className="font-bold text-white text-sm">{apiKey.keyName}</span>
+                <ProviderBadge provider={secretKey.providerCode} />
+                <span className="font-bold text-white text-sm">{secretKey.keyName}</span>
               </div>
               <span className="text-[11px] text-zinc-400 block mt-0.5">{platform.category}</span>
             </div>
@@ -2001,7 +1595,7 @@ function WorkingModelsModal({ apiKey, onClose }: { apiKey: any; onClose: () => v
           </span>
         </div>
 
-        {/* Platform Capabilities */}
+        {/* Capabilities */}
         <div>
           <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block mb-2">
             Verified Platform Capabilities
@@ -2020,7 +1614,7 @@ function WorkingModelsModal({ apiKey, onClose }: { apiKey: any; onClose: () => v
         <div className="space-y-2 pt-2 border-t border-zinc-800/80">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
-              <Code2 className="w-3.5 h-3.5 text-purple-400" /> Integration Code Example
+              <Code2 className="w-3.5 h-3.5 text-sky-400" /> Integration Code Example
             </span>
             <div className="flex items-center gap-1 bg-zinc-900 p-0.5 rounded-lg border border-zinc-800 text-[10px]">
               {(['curl', 'js', 'python'] as const).map((tab) => (
@@ -2028,7 +1622,7 @@ function WorkingModelsModal({ apiKey, onClose }: { apiKey: any; onClose: () => v
                   key={tab}
                   onClick={() => setActiveCodeTab(tab)}
                   className={`px-2 py-0.5 rounded uppercase font-semibold transition-all cursor-pointer ${
-                    activeCodeTab === tab ? 'bg-purple-600 text-white' : 'text-zinc-400 hover:text-white'
+                    activeCodeTab === tab ? 'bg-sky-600 text-white' : 'text-zinc-400 hover:text-white'
                   }`}
                 >
                   {tab === 'js' ? 'Node.js' : tab}
@@ -2042,23 +1636,19 @@ function WorkingModelsModal({ apiKey, onClose }: { apiKey: any; onClose: () => v
               <code>{platform.codeSnippet[activeCodeTab]}</code>
             </pre>
             <button
-              onClick={() => copySlug(platform.codeSnippet[activeCodeTab])}
+              onClick={() => copyCode(platform.codeSnippet[activeCodeTab])}
               className="absolute top-2 right-2 p-1.5 rounded-md bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors cursor-pointer"
               title="Copy snippet"
             >
-              {copiedSlug === platform.codeSnippet[activeCodeTab] ? (
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
-              ) : (
-                <Copy className="w-3.5 h-3.5" />
-              )}
+              {copiedSnippet ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
             </button>
           </div>
         </div>
 
         {/* Security & Health Note */}
-        <div className="p-3 rounded-xl bg-purple-500/5 border border-purple-500/20 flex items-center justify-between text-xs">
+        <div className="p-3 rounded-xl bg-sky-500/5 border border-sky-500/20 flex items-center justify-between text-xs">
           <div className="flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-purple-400" />
+            <ShieldCheck className="w-4 h-4 text-sky-400" />
             <span className="text-zinc-300 text-[11px]">Vaulted with AES-256 GCM encryption. Secret is protected from unauthorized access.</span>
           </div>
           <button

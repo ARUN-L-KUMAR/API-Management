@@ -24,8 +24,8 @@ export function Button({
         'inline-flex items-center justify-center gap-2 font-semibold rounded-lg transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed',
         {
           'bg-purple-600 hover:bg-purple-500 text-white shadow-md': variant === 'primary',
-          'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700': variant === 'secondary',
-          'hover:bg-zinc-800/40 text-zinc-400 hover:text-zinc-200': variant === 'ghost',
+          'bg-card dark:bg-zinc-800 hover:bg-muted dark:hover:bg-zinc-700 text-foreground dark:text-zinc-200 border border-border dark:border-zinc-700 shadow-xs': variant === 'secondary',
+          'hover:bg-muted text-muted-foreground hover:text-foreground': variant === 'ghost',
           'bg-red-600 hover:bg-red-500 text-white': variant === 'danger',
         },
         {

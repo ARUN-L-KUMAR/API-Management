@@ -1,269 +1,264 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import {
   Key, Folder, Database, Terminal, Activity,
-  Plus, Trash2, Settings, Sun, Moon, Menu, X, Edit3, LogOut, User,
+  Settings, Sun, Moon, Menu, X, LogOut,
+  PanelLeftClose, PanelLeftOpen, ShieldCheck
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
-import { useStore } from '@/store/useStore'
 import { useTheme } from '@/hooks/useTheme'
-import { Modal } from './ui/Modal'
-import { Input } from './ui/Input'
-import { Button } from './ui/Button'
 
-const navItems = [
-  { href: '/keys', label: 'API Keys Vault', icon: Key },
-  { href: '/models', label: 'Models Catalog', icon: Database },
-  { href: '/playground', label: 'Playground Console', icon: Terminal },
-  { href: '/logs', label: 'Verification Logs', icon: Activity },
+const AI_PROVIDERS = [
+  'openai', 'anthropic', 'gemini', 'groq', 'deepseek', 'together', 'openrouter', 'opencode', 'doubleworld'
+]
+
+interface NavItem {
+  href: string
+  label: string
+  icon: any
+  type?: 'ai-keys' | 'platform-secrets' | 'folders'
+}
+
+interface NavSection {
+  id: string
+  title: string
+  items: NavItem[]
+}
+
+const navSections: NavSection[] = [
+  {
+    id: 'core',
+    title: 'Core Platform',
+    items: [
+      { href: '/keys', label: 'AI Models Vault', icon: Key, type: 'ai-keys' },
+      { href: '/vault', label: 'Platform Secrets', icon: ShieldCheck, type: 'platform-secrets' },
+    ],
+  },
+  {
+    id: 'workspaces',
+    title: 'Workspaces',
+    items: [
+      { href: '/folders', label: 'Workspace Folders', icon: Folder, type: 'folders' },
+    ],
+  },
+  {
+    id: 'tools',
+    title: 'Developer Suite',
+    items: [
+      { href: '/models', label: 'Models Catalog', icon: Database },
+      { href: '/playground', label: 'Playground Console', icon: Terminal },
+      { href: '/logs', label: 'Verification Logs', icon: Activity },
+    ],
+  },
 ]
 
 export default function Sidebar() {
   const pathname = usePathname()
-  const queryClient = useQueryClient()
   const { theme, toggleTheme, mounted } = useTheme()
   const { user, organization, logout } = useAuth()
-  const {
-    activeFolderId, activeTagIds, setActiveFolderId, toggleTagId,
-  } = useStore()
 
-  const [isFolderModalOpen, setIsFolderModalOpen] = useState(false)
-  const [isTagModalOpen, setIsTagModalOpen] = useState(false)
-  const [isFolderSettingsOpen, setIsFolderSettingsOpen] = useState(false)
-  const [editingFolder, setEditingFolder] = useState<any | null>(null)
-  const [editFolderName, setEditFolderName] = useState('')
-  const [newFolderName, setNewFolderName] = useState('')
-  const [newTagName, setNewTagName] = useState('')
-  const [newTagColor, setNewTagColor] = useState('#8b5cf6')
+  // Responsive and collapsible states
+  const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+
+  // Load collapsed preference from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('nexus_sidebar_collapsed')
+      if (saved !== null) {
+        setCollapsed(saved === 'true')
+      }
+    } catch (_) {}
+  }, [])
+
+  const handleToggleCollapse = () => {
+    const next = !collapsed
+    setCollapsed(next)
+    try {
+      localStorage.setItem('nexus_sidebar_collapsed', String(next))
+    } catch (_) {}
+  }
 
   const { data: folders = [] } = useQuery({
     queryKey: ['folders'],
     queryFn: api.getFolders,
   })
 
-  const { data: tags = [] } = useQuery({
-    queryKey: ['tags'],
-    queryFn: api.getTags,
+  const { data: keys = [] } = useQuery({
+    queryKey: ['keys'],
+    queryFn: () => api.getKeys(),
   })
 
-  const createFolderMutation = useMutation({
-    mutationFn: api.createFolder,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['folders'] })
-      setIsFolderModalOpen(false)
-      setNewFolderName('')
-    },
-  })
+  const aiCount = keys.filter((k: any) => AI_PROVIDERS.includes(k.providerCode?.toLowerCase())).length
+  const platformCount = keys.filter((k: any) => !AI_PROVIDERS.includes(k.providerCode?.toLowerCase())).length
+  const folderCount = folders.length
 
-  const deleteFolderMutation = useMutation({
-    mutationFn: api.deleteFolder,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['folders'] })
-      setActiveFolderId(null)
-    },
-  })
-
-  const updateFolderMutation = useMutation({
-    mutationFn: ({ id, name }: { id: string; name: string }) => api.updateFolder(id, name),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['folders'] })
-      setIsFolderSettingsOpen(false)
-      setEditingFolder(null)
-    },
-  })
-
-  const createTagMutation = useMutation({
-    mutationFn: (data: { name: string; color: string }) => api.createTag(data.name, data.color),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tags'] })
-      setIsTagModalOpen(false)
-      setNewTagName('')
-    },
-  })
-
-  const deleteTagMutation = useMutation({
-    mutationFn: api.deleteTag,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tags'] })
-    },
-  })
+  const getCount = (type?: string) => {
+    if (type === 'ai-keys') return aiCount
+    if (type === 'platform-secrets') return platformCount
+    if (type === 'folders') return folderCount
+    return null
+  }
 
   const sidebarContent = (
     <>
-      <div className="p-6 border-b border-[#1f1f23] flex items-center gap-3">
-        <div className="p-2 bg-purple-600/10 border border-purple-500/30 rounded-lg text-purple-400">
-          <Database className="w-5 h-5" />
-        </div>
-        <div>
-          <Link href="/">
-            <h1 className="font-bold text-sm leading-none tracking-tight text-white hover:text-purple-400 transition-colors">AI REGISTRY</h1>
-          </Link>
-          <span className="text-[10px] text-zinc-500 font-medium">Model Discovery Hub</span>
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-7">
-        {/* Navigation */}
-        <div className="space-y-1">
-          <span className="text-[10px] uppercase font-bold tracking-wider text-zinc-500 px-3">Navigation</span>
-          {navItems.map((item) => {
-            const Icon = item.icon
-            const isActive = pathname === item.href || (item.href === '/keys' && pathname === '/')
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setMobileOpen(false)}
-                className={`flex items-center gap-3 w-full px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                  isActive
-                    ? 'bg-purple-600/10 border border-purple-500/20 text-purple-400'
-                    : 'text-zinc-400 hover:bg-zinc-800/40 hover:text-zinc-200'
-                }`}
-              >
-                <Icon className="w-4 h-4 shrink-0" />
-                {item.label}
-              </Link>
-            )
-          })}
-        </div>
-
-        {/* Folders */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between px-3">
-            <span className="text-[10px] uppercase font-bold tracking-wider text-zinc-500">Folders</span>
-            <button
-              onClick={() => setIsFolderModalOpen(true)}
-              className="p-1 hover:bg-zinc-800 rounded text-zinc-400 hover:text-zinc-200 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-            </button>
+      {/* Brand Header */}
+      <div className={`border-b border-border flex items-center shrink-0 ${
+        collapsed ? 'p-3.5 justify-center' : 'px-4 py-3.5 justify-between'
+      }`}>
+        <Link href="/keys" className="flex items-center gap-2.5 group min-w-0">
+          <div className="relative shrink-0">
+            <div className="p-2 bg-purple-600/10 border border-purple-500/30 rounded-xl text-purple-500 dark:text-purple-400 group-hover:scale-105 transition-transform shadow-xs">
+              <Database className="w-4 h-4" />
+            </div>
           </div>
-          <div className="space-y-0.5">
-            <button
-              onClick={() => setActiveFolderId(null)}
-              className={`flex items-center justify-between w-full px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                !activeFolderId ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200'
-              }`}
-            >
-              <span className="flex items-center gap-2">
-                <Folder className="w-3.5 h-3.5 text-zinc-500" /> All Keys
-              </span>
-            </button>
-            {folders.map((folder: any) => (
-              <div key={folder.id} className="group flex items-center justify-between rounded-lg hover:bg-zinc-900/60">
-                <button
-                  onClick={() => setActiveFolderId(folder.id)}
-                  className={`flex-1 flex items-center gap-2 px-3 py-1.5 text-left text-xs font-medium transition-all ${
-                    activeFolderId === folder.id ? 'text-purple-400' : 'text-zinc-400 group-hover:text-zinc-200'
-                  }`}
-                >
-                  <Folder className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">{folder.name}</span>
-                </button>
-                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity mr-1">
-                  <button
-                    onClick={() => { setEditingFolder(folder); setEditFolderName(folder.name); setIsFolderSettingsOpen(true) }}
-                    className="p-1 text-zinc-500 hover:text-purple-400 cursor-pointer"
-                  >
-                    <Settings className="w-3 h-3" />
-                  </button>
-                  <button
-                    onClick={() => deleteFolderMutation.mutate(folder.id)}
-                    className="p-1 text-zinc-500 hover:text-red-400 cursor-pointer"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </div>
+          {!collapsed && (
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="font-extrabold text-xs tracking-tight text-foreground group-hover:text-purple-600 dark:group-hover:text-purple-300 transition-colors">
+                  NEXUS AI
+                </span>
+                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-purple-500/15 border border-purple-500/30 text-purple-600 dark:text-purple-400 font-mono">
+                  PRO
+                </span>
               </div>
-            ))}
-          </div>
-        </div>
+              <span className="text-[10px] text-muted-foreground truncate block">
+                API & Secrets Vault
+              </span>
+            </div>
+          )}
+        </Link>
 
-        {/* Tags */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between px-3">
-            <span className="text-[10px] uppercase font-bold tracking-wider text-zinc-500">Tags</span>
-            <button
-              onClick={() => setIsTagModalOpen(true)}
-              className="p-1 hover:bg-zinc-800 rounded text-zinc-400 hover:text-zinc-200 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-            </button>
-          </div>
-          <div className="flex flex-wrap gap-1.5 px-3">
-            {tags.map((tag: any) => {
-              const isSelected = activeTagIds.includes(tag.id)
-              return (
-                <div
-                  key={tag.id}
-                  className="group flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold border cursor-pointer select-none transition-all"
-                  style={{
-                    borderColor: isSelected ? tag.color : 'rgba(31, 31, 35, 0.5)',
-                    backgroundColor: isSelected ? `${tag.color}15` : 'rgba(20, 20, 22, 0.4)',
-                    color: isSelected ? tag.color : '#a1a1aa',
-                  }}
-                  onClick={() => toggleTagId(tag.id)}
-                >
-                  <span>{tag.name}</span>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); deleteTagMutation.mutate(tag.id) }}
-                    className="opacity-0 group-hover:opacity-100 hover:text-red-400 transition-opacity cursor-pointer"
-                  >
-                    ×
-                  </button>
-                </div>
-              )
-            })}
-          </div>
-        </div>
+        {/* Desktop Collapse Toggle */}
+        <button
+          onClick={handleToggleCollapse}
+          className="hidden lg:flex p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {collapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+        </button>
       </div>
 
-      {/* User Info */}
-      {user && (
-        <div className="px-4 py-3 border-t border-[#1f1f23]">
-          <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-zinc-900/50">
-            <div className="p-1.5 bg-purple-600/10 border border-purple-500/20 rounded-lg text-purple-400">
-              <User className="w-3.5 h-3.5" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-zinc-200 truncate">{user.name || user.email}</p>
-              <p className="text-[10px] text-zinc-500 truncate">{organization?.name}</p>
-            </div>
-            <button
-              onClick={logout}
-              className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-zinc-800 rounded-lg transition-all cursor-pointer"
-              title="Sign out"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Middle Scrollable Section with distinct grouped sections */}
+      <div className={`flex-1 overflow-y-auto space-y-4 py-3 ${
+        collapsed ? 'px-2' : 'px-3'
+      }`}>
+        {navSections.map((section, idx) => (
+          <div key={section.id} className={idx > 0 ? 'pt-2.5 border-t border-border' : ''}>
+            {!collapsed ? (
+              <span className="text-[9px] uppercase font-bold tracking-widest text-muted-foreground px-2.5 block mb-1.5">
+                {section.title}
+              </span>
+            ) : idx > 0 ? (
+              <div className="w-6 h-px bg-border mx-auto my-2" />
+            ) : null}
 
-      {/* Bottom Actions */}
-      <div className="p-4 border-t border-[#1f1f23] space-y-1">
-        <Link
-          href="/settings"
-          onClick={() => setMobileOpen(false)}
-          className={`flex items-center gap-3 w-full px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-            pathname === '/settings' ? 'bg-purple-600/10 border border-purple-500/20 text-purple-400' : 'text-zinc-400 hover:bg-zinc-800/40 hover:text-zinc-200'
-          }`}
-        >
-          <Settings className="w-4 h-4" /> Settings
-        </Link>
-        <button
-          onClick={toggleTheme}
-          className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-xs font-medium text-zinc-400 hover:bg-zinc-800/40 hover:text-zinc-200 transition-all cursor-pointer"
-        >
-          {mounted ? (theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />) : <div className="w-4 h-4" />}
-          {mounted ? (theme === 'dark' ? 'Light Mode' : 'Dark Mode') : 'Theme'}
-        </button>
+            <div className="space-y-1">
+              {section.items.map((item) => {
+                const Icon = item.icon
+                const isActive =
+                  pathname === item.href ||
+                  (item.href === '/keys' && pathname === '/') ||
+                  (item.href === '/folders' && pathname.startsWith('/folders'))
+                const count = getCount(item.type)
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setMobileOpen(false)}
+                    title={collapsed ? item.label : undefined}
+                    className={`relative flex items-center rounded-xl text-xs font-semibold transition-all ${
+                      collapsed
+                        ? 'justify-center p-2.5'
+                        : 'justify-between px-3 py-2'
+                    } ${
+                      isActive
+                        ? 'bg-purple-500/10 text-purple-700 dark:text-purple-300 border border-purple-500/30 shadow-xs'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground border border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-purple-600 dark:text-purple-400' : 'text-muted-foreground'}`} />
+                      {!collapsed && <span className="truncate">{item.label}</span>}
+                    </div>
+                    {!collapsed && count !== null && (
+                      <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                        isActive ? 'bg-purple-500/20 text-purple-700 dark:text-purple-300' : 'bg-muted text-muted-foreground'
+                      }`}>
+                        {count}
+                      </span>
+                    )}
+                    {collapsed && count !== null && (
+                      <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-purple-500" />
+                    )}
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Modern Compact Integrated Footer (Profile + Settings + Theme) */}
+      <div className={`border-t border-border bg-muted/30 dark:bg-zinc-950/60 shrink-0 ${
+        collapsed ? 'p-2 flex flex-col items-center gap-2' : 'px-3 py-2.5 flex items-center justify-between'
+      }`}>
+        {/* User Avatar & Info */}
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-7 h-7 rounded-lg bg-linear-to-tr from-purple-600 to-indigo-600 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs">
+            {(user?.name || user?.email || 'A')[0].toUpperCase()}
+          </div>
+          {!collapsed && (
+            <div className="min-w-0 flex-1">
+              <span className="text-xs font-semibold text-foreground truncate block leading-tight">
+                {user?.name || user?.email || 'Admin'}
+              </span>
+              <span className="text-[9px] text-muted-foreground font-mono block truncate">
+                {organization?.name || 'Workspace'}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Quick Actions (Settings, Theme, Logout) */}
+        <div className={`flex items-center ${collapsed ? 'flex-col gap-1' : 'gap-1'}`}>
+          <Link
+            href="/settings"
+            onClick={() => setMobileOpen(false)}
+            className={`p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors ${
+              pathname === '/settings' ? 'text-purple-600 dark:text-purple-400 bg-purple-500/10' : ''
+            }`}
+            title="Settings & Security"
+          >
+            <Settings className="w-3.5 h-3.5" />
+          </Link>
+
+          <button
+            onClick={toggleTheme}
+            className="p-1.5 rounded-lg text-muted-foreground hover:text-amber-500 hover:bg-muted transition-colors cursor-pointer"
+            title={mounted && theme === 'dark' ? 'Switch to Light Theme' : 'Switch to Dark Theme'}
+          >
+            {mounted && theme === 'dark' ? (
+              <Sun className="w-3.5 h-3.5 text-amber-400" />
+            ) : (
+              <Moon className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+            )}
+          </button>
+
+          <button
+            onClick={logout}
+            className="p-1.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-muted transition-colors cursor-pointer"
+            title="Sign Out"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
     </>
   )
@@ -273,128 +268,25 @@ export default function Sidebar() {
       {/* Mobile toggle */}
       <button
         onClick={() => setMobileOpen(!mobileOpen)}
-        className="lg:hidden fixed top-4 left-4 z-50 p-2 glass-panel rounded-lg border border-[#1f1f23] text-zinc-400 hover:text-zinc-200 cursor-pointer"
+        className="lg:hidden fixed top-3.5 left-4 z-50 p-2 glass-panel rounded-lg border border-[#1f1f23] text-zinc-400 hover:text-zinc-200 cursor-pointer"
         aria-label="Toggle menu"
       >
-        {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+        {mobileOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
       </button>
 
       {/* Overlay for mobile */}
       {mobileOpen && (
-        <div className="lg:hidden fixed inset-0 bg-black/60 z-30" onClick={() => setMobileOpen(false)} />
+        <div className="lg:hidden fixed inset-0 bg-black/60 z-30 backdrop-blur-xs" onClick={() => setMobileOpen(false)} />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar Container */}
       <aside className={`
-        fixed lg:static inset-y-0 left-0 z-40 w-64 glass-panel border-r border-[#1f1f23] flex flex-col h-full shrink-0 transition-transform duration-300
+        fixed lg:static inset-y-0 left-0 z-40 glass-panel border-r border-border flex flex-col h-full shrink-0 transition-all duration-200
+        ${collapsed ? 'lg:w-16 w-60' : 'w-60'}
         ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
         {sidebarContent}
       </aside>
-
-      {/* Modals */}
-      <Modal isOpen={isFolderModalOpen} onClose={() => setIsFolderModalOpen(false)} title="Create Folder" maxWidth="sm">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            if (!newFolderName.trim()) return
-            createFolderMutation.mutate(newFolderName)
-          }}
-          className="space-y-4"
-        >
-          <Input
-            label="Folder Name"
-            placeholder="e.g. Client A, Testing, Production"
-            value={newFolderName}
-            onChange={(e) => setNewFolderName(e.target.value)}
-            required
-          />
-          <Button type="submit" className="w-full" loading={createFolderMutation.isPending}>
-            Create Folder
-          </Button>
-        </form>
-      </Modal>
-
-      <Modal isOpen={isFolderSettingsOpen} onClose={() => { setIsFolderSettingsOpen(false); setEditingFolder(null) }} title="Folder Settings" maxWidth="sm">
-        {editingFolder && (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault()
-              if (!editFolderName.trim()) return
-              updateFolderMutation.mutate({ id: editingFolder.id, name: editFolderName.trim() })
-            }}
-            className="space-y-4"
-          >
-            <div className="space-y-2">
-              <label className="text-[10px] uppercase font-bold text-zinc-400">Folder Name</label>
-              <input
-                value={editFolderName}
-                onChange={(e) => setEditFolderName(e.target.value)}
-                className="w-full bg-zinc-900 border border-[#1f1f23] rounded-lg text-xs text-white px-3 py-2 focus:outline-none focus:border-purple-500"
-                required
-              />
-            </div>
-            {editingFolder.createdAt && (
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-zinc-400">Created</label>
-                <p className="text-xs text-zinc-500">{new Date(editingFolder.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-              </div>
-            )}
-            <div className="flex gap-3">
-              <Button
-                type="button"
-                variant="ghost"
-                className="flex-1"
-                onClick={() => { setIsFolderSettingsOpen(false); setEditingFolder(null) }}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" className="flex-1" loading={updateFolderMutation.isPending}>
-                Save
-              </Button>
-            </div>
-          </form>
-        )}
-      </Modal>
-
-      <Modal isOpen={isTagModalOpen} onClose={() => setIsTagModalOpen(false)} title="Add Tag" maxWidth="sm">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            if (!newTagName.trim()) return
-            createTagMutation.mutate({ name: newTagName, color: newTagColor })
-          }}
-          className="space-y-4"
-        >
-          <Input
-            label="Tag Label Name"
-            placeholder="e.g. backup, experimental"
-            value={newTagName}
-            onChange={(e) => setNewTagName(e.target.value)}
-            required
-          />
-          <div className="space-y-1.5">
-            <label className="text-[10px] uppercase font-bold text-zinc-400">Hex Color Accent</label>
-            <div className="flex items-center gap-3">
-              <input
-                type="color"
-                value={newTagColor}
-                onChange={(e) => setNewTagColor(e.target.value)}
-                className="w-10 h-8 bg-transparent border-0 cursor-pointer p-0 shrink-0"
-              />
-              <Input
-                required
-                value={newTagColor}
-                onChange={(e) => setNewTagColor(e.target.value)}
-                className="font-mono"
-              />
-            </div>
-          </div>
-          <Button type="submit" className="w-full" loading={createTagMutation.isPending}>
-            Create Tag
-          </Button>
-        </form>
-      </Modal>
     </>
   )
 }

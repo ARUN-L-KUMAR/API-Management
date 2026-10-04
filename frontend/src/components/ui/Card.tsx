@@ -11,7 +11,7 @@ export function Card({ children, className, hover = true }: CardProps) {
   return (
     <div
       className={clsx(
-        'glass-panel rounded-xl border border-[#1f1f23]',
+        'glass-panel rounded-xl border border-border',
         hover && 'transition-all hover:border-purple-500/30 hover:translate-y-[-2px]',
         className
       )}
@@ -23,7 +23,7 @@ export function Card({ children, className, hover = true }: CardProps) {
 
 export function CardHeader({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={clsx('px-5 py-4 border-b border-[#1f1f23] flex items-center justify-between', className)}>
+    <div className={clsx('px-5 py-4 border-b border-border flex items-center justify-between', className)}>
       {children}
     </div>
   )
